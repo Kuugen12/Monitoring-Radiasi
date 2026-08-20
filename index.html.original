@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RadiaTrack — Pantauan Radiasi</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e14;
+    --sidebar:#0c1017;
+    --panel:#121822;
+    --panel-2:#161e2b;
+    --border:#212b3a;
+    --text:#e8edf5;
+    --muted:#7c8798;
+    --muted-2:#4d5768;
+    --accent:#ffc53d;
+    --accent-dim:rgba(255,197,61,.14);
+    --safe:#38d996;
+    --warn:#ff9f45;
+    --danger:#ff5c6b;
+    --sans:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;min-height:100vh;}
+  button,input,select{font-family:var(--sans);}
+
+  /* ================= LOGIN PAGE ================= */
+  .login-page{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    padding:24px;position:relative;overflow:hidden;
+  }
+  .login-page::before{
+    content:'';position:absolute;inset:0;
+    background:
+      radial-gradient(600px 400px at 15% 15%, rgba(255,197,61,.08), transparent 60%),
+      radial-gradient(500px 400px at 85% 85%, rgba(56,217,150,.06), transparent 60%);
+    pointer-events:none;
+  }
+  .login-box{
+    width:380px;max-width:100%;background:var(--panel);border:1px solid var(--border);
+    border-radius:16px;padding:34px 32px;position:relative;z-index:1;
+    box-shadow:0 30px 80px rgba(0,0,0,.45);
+  }
+  .login-brand{display:flex;align-items:center;gap:10px;margin-bottom:26px;}
+  .login-brand .mark{
+    width:38px;height:38px;border-radius:10px;
+    background:conic-gradient(from 210deg,var(--accent),#8a5a00 60%,var(--accent));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;color:#101010;font-size:17px;
+  }
+  .login-brand .name{font-weight:800;font-size:18px;}
+  .login-brand .name span{color:var(--accent);}
+  .login-box h1{font-size:19px;font-weight:800;margin-bottom:4px;}
+  .login-box .sub{font-size:12.5px;color:var(--muted);margin-bottom:22px;}
+
+  .btn-google{
+    width:100%;display:flex;align-items:center;justify-content:center;gap:10px;
+    background:#fff;color:#1f1f1f;border:none;border-radius:9px;padding:11px;
+    font-size:13.5px;font-weight:600;cursor:pointer;margin-bottom:16px;
+  }
+  .btn-google:hover{filter:brightness(.97);}
+  .btn-google svg{width:17px;height:17px;}
+
+  .divider{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border);}
+  .divider span{font-size:11px;color:var(--muted-2);font-weight:600;letter-spacing:.4px;}
+
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11.5px;color:var(--muted);margin-bottom:6px;font-weight:600;}
+  .field input{
+    width:100%;background:var(--panel-2);border:1px solid var(--border);
+    border-radius:8px;padding:11px 12px;color:var(--text);font-size:13.5px;outline:none;
+  }
+  .field input:focus{border-color:var(--accent);}
+
+  .login-submit{
+    width:100%;background:var(--accent);color:#171000;border:none;border-radius:9px;
+    padding:12px;font-weight:700;font-size:13.5px;cursor:pointer;margin-top:4px;
+  }
+  .login-submit:hover{filter:brightness(1.08);}
+
+  .switch-mode{text-align:center;margin-top:18px;font-size:12.5px;color:var(--muted);}
+  .switch-mode a{color:var(--accent);font-weight:600;cursor:pointer;text-decoration:none;}
+  .switch-mode a:hover{text-decoration:underline;}
+
+  .form-err{
+    display:none;background:rgba(255,92,107,.1);border:1px solid rgba(255,92,107,.3);
+    color:var(--danger);font-size:12px;padding:9px 11px;border-radius:8px;margin-bottom:14px;
+  }
+
+  /* ================= APP SHELL ================= */
+  .app{display:none;min-height:100vh;}
+  .app.show{display:flex;}
+
+  .sidebar{width:224px;flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;}
+  .brand{display:flex;align-items:center;gap:10px;padding:22px 20px;border-bottom:1px solid var(--border);}
+  .brand .mark{width:34px;height:34px;border-radius:9px;background:conic-gradient(from 210deg,var(--accent),#8a5a00 60%,var(--accent));display:flex;align-items:center;justify-content:center;font-weight:700;color:#101010;font-size:15px;}
+  .brand .name{font-weight:800;font-size:16.5px;letter-spacing:.2px;}
+  .brand .name span{color:var(--accent);}
+  .brand .tag{font-family:var(--mono);font-size:9.5px;color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:2px 6px;margin-left:auto;}
+
+  nav{flex:1;overflow-y:auto;padding:18px 12px;}
+  .navgroup-label{font-size:10.5px;color:var(--muted-2);font-weight:700;letter-spacing:1.2px;padding:12px 10px 6px;}
+  .navitem{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;color:var(--muted);font-size:13.6px;font-weight:500;cursor:pointer;transition:background .15s,color .15s;}
+  .navitem svg{width:17px;height:17px;flex-shrink:0;}
+  .navitem:hover{background:var(--panel-2);color:var(--text);}
+  .navitem.active{background:var(--accent-dim);color:var(--accent);font-weight:600;}
+  .navitem.active svg{stroke:var(--accent);}
+
+  .sidebar-bottom{border-top:1px solid var(--border);padding:14px 16px;min-height:74px;display:flex;align-items:center;}
+  .profile-block{display:flex;align-items:center;gap:10px;width:100%;}
+  .profile-block .avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;background:linear-gradient(135deg,var(--accent),#c98a00);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;color:#0a0e14;font-size:13px;}
+  .profile-block .info{flex:1;min-width:0;}
+  .profile-block .pname{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .profile-block .prow{display:flex;align-items:center;gap:6px;margin-top:2px;}
+  .profile-block .prole{font-size:10.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .logout-btn{background:none;border:none;color:var(--muted-2);cursor:pointer;padding:6px;border-radius:6px;flex-shrink:0;}
+  .logout-btn:hover{color:var(--danger);background:var(--panel-2);}
+  .logout-btn svg{width:15px;height:15px;}
+
+  main{flex:1;min-width:0;overflow-x:hidden;}
+  #mainContent{padding-bottom:20px;}
+
+  .topbar{display:flex;align-items:center;gap:14px;padding:22px 32px 0;}
+  .topbar h1{font-size:22px;font-weight:800;letter-spacing:-.2px;}
+  .topbar .subicon{width:22px;height:22px;stroke:var(--accent);flex-shrink:0;}
+  .back-link{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12.5px;font-weight:600;cursor:pointer;padding:6px 10px 6px 4px;border-radius:7px;}
+  .back-link:hover{color:var(--text);background:var(--panel-2);}
+  .back-link svg{width:15px;height:15px;}
+  .add-sensor{margin-left:auto;background:var(--accent);color:#171000;border:none;padding:10px 16px;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .add-sensor:hover{filter:brightness(1.07);}
+
+  .page-sub{color:var(--muted);font-size:13px;padding:8px 32px 0;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;padding:16px 32px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px 22px 22px;cursor:pointer;transition:border-color .15s,transform .15s;}
+  .card:hover{border-color:var(--accent);transform:translateY(-2px);}
+  .card-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .zone-icon{width:30px;height:30px;border-radius:8px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .zone-icon svg{width:16px;height:16px;stroke:var(--accent);}
+  .card-head h3{font-size:15.5px;font-weight:700;flex:1;}
+  .chev{width:16px;height:16px;stroke:var(--muted-2);flex-shrink:0;}
+
+  .pulse-dot{position:relative;width:9px;height:9px;flex-shrink:0;}
+  .pulse-dot .core{position:absolute;inset:0;border-radius:50%;background:var(--safe);}
+  .pulse-dot.warn .core{background:var(--warn);}
+  .pulse-dot .ring{position:absolute;inset:-6px;border-radius:50%;border:1.5px solid var(--safe);animation:pulseRing 1.4s ease-out infinite;}
+  .pulse-dot.warn .ring{border-color:var(--warn);}
+  @keyframes pulseRing{0%{transform:scale(.4);opacity:.9;}80%{transform:scale(1.9);opacity:0;}100%{opacity:0;}}
+
+  .metrics{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+  .metric .mlabel{font-size:10.5px;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:6px;}
+  .metric .mval{font-family:var(--mono);font-size:24px;font-weight:600;line-height:1;}
+  .metric .mval .unit{font-size:12px;color:var(--muted);font-weight:500;margin-left:2px;}
+  .spark{margin-top:12px;}
+  .spark svg{width:100%;height:32px;display:block;}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:14px;margin:0 32px 20px;overflow:hidden;}
+  .panel-head{display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border);}
+  .panel-head h2{font-size:15px;font-weight:700;}
+  .live-dot{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--safe);font-weight:600;letter-spacing:.5px;margin-left:auto;}
+  .live-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--safe);animation:pulseRing2 1.6s infinite;}
+  @keyframes pulseRing2{0%{box-shadow:0 0 0 0 rgba(56,217,150,.5);}70%{box-shadow:0 0 0 6px rgba(56,217,150,0);}100%{box-shadow:0 0 0 0 rgba(56,217,150,0);}}
+
+  table{width:100%;border-collapse:collapse;font-size:12.7px;}
+  thead th{text-align:left;font-size:10.2px;color:var(--muted);font-weight:700;letter-spacing:.5px;padding:10px 16px;background:var(--panel-2);border-bottom:1px solid var(--border);white-space:nowrap;}
+  tbody td{padding:10px 16px;border-bottom:1px solid var(--border);color:var(--text);white-space:nowrap;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--panel-2);}
+  td.num{font-family:var(--mono);font-weight:600;}
+  .status-chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:999px;}
+  .status-chip.normal{background:rgba(56,217,150,.12);color:var(--safe);}
+  .status-chip.elevated{background:rgba(255,159,69,.14);color:var(--warn);}
+
+  .table-scroll{overflow-x:auto;}
+  .chart-wrap{padding:18px 22px 22px;height:280px;}
+  footer.hint{text-align:center;color:var(--muted-2);font-size:11.5px;padding:6px 32px 30px;}
+
+  @media(max-width:880px){
+    .sidebar{position:fixed;left:-224px;top:0;bottom:0;z-index:40;}
+    .topbar,.page-sub{padding-left:20px;padding-right:20px;}
+    .cards,.panel{margin-left:20px;margin-right:20px;}
+    .cards{padding:16px 20px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN / REGISTER PAGE ================= -->
+<div class="login-page" id="loginPage">
+  <div class="login-box">
+    <div class="login-brand">
+      <div class="mark">☢</div>
+      <div class="name">radia<span>track</span></div>
+    </div>
+    <h1 id="authTitle">Masuk ke akun</h1>
+    <p class="sub" id="authSub">Pantau tingkat radiasi di seluruh zona secara real-time.</p>
+
+    <div class="form-err" id="formErr"></div>
+
+    <button class="btn-google" id="googleBtn">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.63h6.47c-.28 1.5-1.13 2.77-2.4 3.63v3h3.89c2.28-2.1 3.56-5.19 3.56-8.81z"/><path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.95-2.92l-3.89-3c-1.08.73-2.46 1.16-4.06 1.16-3.12 0-5.77-2.11-6.72-4.94H1.26v3.1C3.24 21.3 7.28 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.3c-.24-.73-.38-1.5-.38-2.3s.14-1.57.38-2.3v-3.1H1.26A11.97 11.97 0 0 0 0 12c0 1.94.46 3.77 1.26 5.4l4.02-3.1z"/><path fill="#EA4335" d="M12 4.76c1.77 0 3.35.61 4.6 1.8l3.45-3.45C17.95 1.19 15.24 0 12 0 7.28 0 3.24 2.7 1.26 6.6l4.02 3.1C6.23 6.87 8.88 4.76 12 4.76z"/></svg>
+      Lanjutkan dengan Google
+    </button>
+
+    <div class="divider"><span>ATAU DENGAN EMAIL</span></div>
+
+    <form id="authForm">
+      <div class="field" id="fieldName" style="display:none;">
+        <label for="fname">Nama lengkap</label>
+        <input id="fname" type="text" placeholder="Nama Anda">
+      </div>
+      <div class="field">
+        <label for="femail">Email</label>
+        <input id="femail" type="email" placeholder="nama@perusahaan.com" required>
+      </div>
+      <div class="field">
+        <label for="fpass">Kata sandi</label>
+        <input id="fpass" type="password" placeholder="••••••••" required>
+      </div>
+      <div class="field" id="fieldConfirm" style="display:none;">
+        <label for="fconfirm">Konfirmasi kata sandi</label>
+        <input id="fconfirm" type="password" placeholder="••••••••">
+      </div>
+      <button type="submit" class="login-submit" id="authSubmitBtn">Masuk</button>
+    </form>
+
+    <div class="switch-mode" id="switchModeWrap">
+      Belum punya akun? <a id="switchModeLink">Daftar</a>
+    </div>
+  </div>
+</div>
+
+<!-- ================= APP SHELL ================= -->
+<div class="app" id="appRoot">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="mark">☢</div>
+      <div class="name">radia<span>track</span></div>
+      <div class="tag">IOT</div>
+    </div>
+    <nav>
+      <div class="navgroup-label">MENU</div>
+      <div class="navitem active" id="navDashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        Dashboard
+      </div>
+    </nav>
+    <div class="sidebar-bottom" id="sidebarBottom"></div>
+  </aside>
+
+  <main>
+    <div id="mainContent"></div>
+  </main>
+</div>
+
+<script>
+/* ================= DATA MODEL ================= */
+const zones = [
+  { name:"Zona A — Gudang", icon:"box", rate:142, doseRate:0.18, total:4.82, status:"safe" },
+  { name:"Zona B — R. Kontrol", icon:"server", rate:305, doseRate:0.41, total:9.94, status:"warn" },
+  { name:"Zona C — Laboratorium", icon:"drop", rate:88, doseRate:0.12, total:3.05, status:"safe" },
+];
+
+const icons = {
+  box:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+  server:'<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><circle cx="7" cy="7.5" r="1"/><circle cx="7" cy="16.5" r="1"/>',
+  drop:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'
+};
+
+// per-zone sensor node readings: No, Name, Time, Count Rate, AVG Count, Dose Rate, AVG Dose, Total
+function seedZoneRows(zIdx){
+  const z = zones[zIdx];
+  const nodeLetter = String.fromCharCode(65 + zIdx);
+  const rows = [];
+  for(let i=0;i<6;i++){
+    const jitter = (v,f) => +(v*(1+(Math.random()-0.5)*f));
+    const cr = jitter(z.rate, 0.15);
+    const dr = jitter(z.doseRate, 0.18);
+    rows.push({
+      no: i+1,
+      name: `Node ${nodeLetter}${i+1}`,
+      time: new Date(Date.now() - i*60000).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+      countRate: cr,
+      avgCount: cr*(0.95+Math.random()*0.1),
+      doseRate: dr,
+      avgDose: dr*(0.95+Math.random()*0.1),
+      total: jitter(z.total, 0.06)
+    });
+  }
+  return rows;
+}
+const zoneRows = zones.map((_,i)=>seedZoneRows(i));
+
+function sparkPath(seed, w, h){
+  let pts = []; let v = 0.5;
+  for(let i=0;i<20;i++){
+    v += (Math.sin(seed + i*0.7) * 0.06) + (Math.random()-0.5)*0.03;
+    v = Math.max(0.15, Math.min(0.85, v));
+    pts.push([ (i/19)*w, h - v*h ]);
+  }
+  return pts.map((p,i)=> (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+}
+
+/* ================= AUTH PAGE LOGIC ================= */
+let isRegister = false;
+const authTitle = document.getElementById('authTitle');
+const authSub = document.getElementById('authSub');
+const fieldName = document.getElementById('fieldName');
+const fieldConfirm = document.getElementById('fieldConfirm');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const switchModeWrap = document.getElementById('switchModeWrap');
+const formErr = document.getElementById('formErr');
+
+function renderAuthMode(){
+  formErr.style.display = 'none';
+  if(isRegister){
+    authTitle.textContent = 'Buat akun baru';
+    authSub.textContent = 'Daftar untuk mulai memantau sensor radiasi Anda.';
+    fieldName.style.display = 'block';
+    fieldConfirm.style.display = 'block';
+    authSubmitBtn.textContent = 'Daftar Akun';
+    switchModeWrap.innerHTML = 'Sudah punya akun? <a id="switchModeLink">Masuk</a>';
+  } else {
+    authTitle.textContent = 'Masuk ke akun';
+    authSub.textContent = 'Pantau tingkat radiasi di seluruh zona secara real-time.';
+    fieldName.style.display = 'none';
+    fieldConfirm.style.display = 'none';
+    authSubmitBtn.textContent = 'Masuk';
+    switchModeWrap.innerHTML = 'Belum punya akun? <a id="switchModeLink">Daftar</a>';
+  }
+  document.getElementById('switchModeLink').addEventListener('click', () => {
+    isRegister = !isRegister;
+    renderAuthMode();
+  });
+}
+renderAuthMode();
+
+document.getElementById('googleBtn').addEventListener('click', () => {
+  enterApp('Operator Google', 'operator@gmail.com');
+});
+
+document.getElementById('authForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('femail').value.trim();
+  const pass = document.getElementById('fpass').value;
+  if(isRegister){
+    const name = document.getElementById('fname').value.trim();
+    const confirm = document.getElementById('fconfirm').value;
+    if(!name){ showErr('Nama lengkap wajib diisi.'); return; }
+    if(pass !== confirm){ showErr('Konfirmasi kata sandi tidak cocok.'); return; }
+    if(pass.length < 6){ showErr('Kata sandi minimal 6 karakter.'); return; }
+    enterApp(name, email);
+  } else {
+    if(!email || !pass){ showErr('Email dan kata sandi wajib diisi.'); return; }
+    enterApp(email.split('@')[0], email);
+  }
+});
+function showErr(msg){ formErr.textContent = msg; formErr.style.display = 'block'; }
+
+function enterApp(displayName, email){
+  document.getElementById('loginPage').style.display = 'none';
+  document.getElementById('appRoot').classList.add('show');
+  const initials = displayName.split(/[.\s]/).filter(Boolean).slice(0,2).map(s=>s[0].toUpperCase()).join('') || 'OP';
+  document.getElementById('sidebarBottom').innerHTML = `
+    <div class="profile-block">
+      <div class="avatar">${initials}</div>
+      <div class="info">
+        <div class="pname">${displayName}</div>
+        <div class="prow"><span class="prole">${email}</span></div>
+      </div>
+      <button class="logout-btn" id="logoutBtn" title="Keluar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
+    </div>`;
+  document.getElementById('logoutBtn').addEventListener('click', () => location.reload());
+  goDashboard();
+}
+
+document.getElementById('navDashboard').addEventListener('click', goDashboard);
+
+/* ================= VIEW ROUTER ================= */
+let currentView = 'dashboard'; // 'dashboard' | 'zone'
+let currentZoneIdx = 0;
+let zoneChart = null;
+
+function goDashboard(){
+  currentView = 'dashboard';
+  document.getElementById('navDashboard').classList.add('active');
+  renderDashboardPage();
+}
+
+function goZone(idx){
+  currentView = 'zone';
+  currentZoneIdx = idx;
+  document.getElementById('navDashboard').classList.remove('active');
+  renderZonePage(idx);
+}
+
+function renderDashboardPage(){
+  const main = document.getElementById('mainContent');
+  main.innerHTML = `
+    <div class="topbar">
+      <svg class="subicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <h1>Pantauan Radiasi</h1>
+    </div>
+    <p class="page-sub">Pilih zona untuk melihat detail sensor.</p>
+    <section class="cards" id="cardsRoot"></section>
+    <footer class="hint">Data bersifat simulasi untuk keperluan desain ulang dashboard.</footer>
+  `;
+  renderCards();
+}
+
+function renderCards(){
+  const root = document.getElementById('cardsRoot');
+  if(!root) return;
+  root.innerHTML = zones.map((z, idx) => {
+    const dotClass = z.status === 'warn' ? 'warn' : '';
+    return `
+    <div class="card" data-idx="${idx}">
+      <div class="card-head">
+        <div class="zone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${icons[z.icon]}</svg></div>
+        <h3>${z.name}</h3>
+        <div class="pulse-dot ${dotClass}"><span class="ring"></span><span class="core"></span></div>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="mlabel">RATE</div><div class="mval">${z.rate.toFixed(0)}<span class="unit">cpm</span></div></div>
+        <div class="metric"><div class="mlabel">DOSE RATE</div><div class="mval">${z.doseRate.toFixed(2)}<span class="unit">µSv/h</span></div></div>
+        <div class="metric"><div class="mlabel">TOTAL</div><div class="mval">${z.total.toFixed(2)}<span class="unit">mSv</span></div></div>
+      </div>
+      <div class="spark">
+        <svg viewBox="0 0 300 32" preserveAspectRatio="none">
+          <path d="${sparkPath(idx*3, 300, 32)}" fill="none" stroke="#ffc53d" stroke-width="1.6"/>
+          <path d="${sparkPath(idx*3+9, 300, 32)}" fill="none" stroke="#4d5768" stroke-width="1.2" stroke-dasharray="3 3"/>
+        </svg>
+      </div>
+    </div>`;
+  }).join('');
+  root.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', () => goZone(+card.dataset.idx));
+  });
+}
+
+function renderZonePage(idx){
+  const z = zones[idx];
+  const main = document.getElementById('mainContent');
+  main.innerHTML = `
+    <div class="topbar">
+      <div class="back-link" id="backToDash">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        Dashboard
+      </div>
+    </div>
+    <div class="topbar" style="padding-top:6px;">
+      <div class="zone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${icons[z.icon]}</svg></div>
+      <h1>${z.name}</h1>
+      <button class="add-sensor">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        Tambah Sensor
+      </button>
+    </div>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Data Sensor</h2>
+        <div class="live-dot">LIVE</div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>No</th><th>Name</th><th>Time</th><th>Count Rate</th><th>AVG Count</th><th>Dose Rate</th><th>AVG Dose</th><th>Total</th><th>Status</th></tr>
+          </thead>
+          <tbody id="zoneTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Grafik Sensor — ${z.name}</h2></div>
+      <div class="chart-wrap"><canvas id="zoneChartCanvas"></canvas></div>
+    </section>
+
+    <footer class="hint">Data bersifat simulasi untuk keperluan desain ulang dashboard.</footer>
+  `;
+  document.getElementById('backToDash').addEventListener('click', goDashboard);
+  renderZoneTable(idx);
+  renderZoneChart(idx);
+}
+
+function renderZoneTable(idx){
+  const body = document.getElementById('zoneTableBody');
+  if(!body) return;
+  const rows = zoneRows[idx];
+  body.innerHTML = rows.map(r => {
+    const elevated = r.doseRate > zones[idx].doseRate * 1.25;
+    return `
+    <tr>
+      <td>${r.no}</td>
+      <td>${r.name}</td>
+      <td>${r.time}</td>
+      <td class="num">${r.countRate.toFixed(0)}</td>
+      <td class="num">${r.avgCount.toFixed(0)}</td>
+      <td class="num">${r.doseRate.toFixed(2)}</td>
+      <td class="num">${r.avgDose.toFixed(2)}</td>
+      <td class="num">${r.total.toFixed(2)}</td>
+      <td><span class="status-chip ${elevated ? 'elevated' : 'normal'}">${elevated ? 'Elevated' : 'Normal'}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderZoneChart(idx){
+  const rows = [...zoneRows[idx]].reverse();
+  const ctx = document.getElementById('zoneChartCanvas').getContext('2d');
+  if(zoneChart) zoneChart.destroy();
+  zoneChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: rows.map(r => r.time),
+      datasets: [
+        {
+          label: 'Count Rate (cpm)',
+          data: rows.map(r => +r.countRate.toFixed(1)),
+          borderColor: '#ffc53d',
+          backgroundColor: 'rgba(255,197,61,0.08)',
+          borderWidth: 2, pointRadius: 2, tension: 0.35, yAxisID: 'y'
+        },
+        {
+          label: 'Dose Rate (µSv/h)',
+          data: rows.map(r => +r.doseRate.toFixed(2)),
+          borderColor: '#38d996',
+          backgroundColor: 'rgba(56,217,150,0.08)',
+          borderWidth: 2, pointRadius: 2, tension: 0.35, yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: true, labels: { color: '#7c8798', font:{family:"'Inter'", size:11} } } },
+      scales: {
+        x: { grid: { color: '#1c2531' }, ticks: { color: '#7c8798', font:{family:"'IBM Plex Mono'", size:10} } },
+        y: { position:'left', grid: { color: '#1c2531' }, ticks: { color: '#ffc53d', font:{family:"'IBM Plex Mono'", size:10} } },
+        y1: { position:'right', grid: { display:false }, ticks: { color: '#38d996', font:{family:"'IBM Plex Mono'", size:10} } }
+      }
+    }
+  });
+}
+
+/* ================= LIVE SIMULATION ================= */
+function tick(){
+  zones.forEach((z) => {
+    z.rate = Math.max(20, +(z.rate + (Math.random()-0.5)*10).toFixed(0));
+    z.doseRate = Math.max(0.05, +(z.doseRate + (Math.random()-0.5)*0.02).toFixed(2));
+    z.total = +(z.total + z.doseRate/3600*5).toFixed(2);
+    z.status = z.doseRate > 0.35 ? 'warn' : 'safe';
+  });
+
+  zoneRows.forEach((rows, zIdx) => {
+    const z = zones[zIdx];
+    const nodeLetter = String.fromCharCode(65 + zIdx);
+    const jitter = (v,f) => +(v*(1+(Math.random()-0.5)*f));
+    const cr = jitter(z.rate, 0.15);
+    const dr = jitter(z.doseRate, 0.18);
+    rows.unshift({
+      no: rows[0].no + 1,
+      name: `Node ${nodeLetter}${Math.ceil(Math.random()*3)}`,
+      time: new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
+      countRate: cr, avgCount: cr*(0.95+Math.random()*0.1),
+      doseRate: dr, avgDose: dr*(0.95+Math.random()*0.1),
+      total: jitter(z.total, 0.06)
+    });
+    zoneRows[zIdx] = rows.slice(0, 6);
+  });
+
+  if(currentView === 'dashboard') renderCards();
+  if(currentView === 'zone'){ renderZoneTable(currentZoneIdx); renderZoneChart(currentZoneIdx); }
+}
+setInterval(tick, 5000);
+</script>
+</body>
+</html>
