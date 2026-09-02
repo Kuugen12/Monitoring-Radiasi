@@ -15,8 +15,10 @@ $app = new Illuminate\Foundation\Application(
     $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)
 );
 
-if (isset($_ENV['VERCEL']) || isset($_SERVER['VERCEL']) || getenv('VERCEL')) {
-    $app->useStoragePath('/tmp/storage');
+if (isset($_ENV['LARAVEL_STORAGE_PATH'])) {
+    $app->useStoragePath($_ENV['LARAVEL_STORAGE_PATH']);
+} elseif (isset($_SERVER['LARAVEL_STORAGE_PATH'])) {
+    $app->useStoragePath($_SERVER['LARAVEL_STORAGE_PATH']);
 }
 
 
