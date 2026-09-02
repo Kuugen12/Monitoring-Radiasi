@@ -19,50 +19,47 @@ $dirs = [
 
 foreach ($dirs as $dir) {
     if (!is_dir($dir)) {
-        mkdir($dir, 0777, true);
+        @mkdir($dir, 0777, true);
     }
 }
 
-// 2. Set environment variables to point caches and storage to /tmp
-putenv("APP_CONFIG_CACHE={$tmpCache}/config.php");
-putenv("APP_EVENTS_CACHE={$tmpCache}/events.php");
-putenv("APP_PACKAGES_CACHE={$tmpCache}/packages.php");
-putenv("APP_ROUTES_CACHE={$tmpCache}/routes.php");
-putenv("APP_SERVICES_CACHE={$tmpCache}/services.php");
-putenv("VIEW_COMPILED_PATH={$tmpStorage}/framework/views");
-putenv("LARAVEL_STORAGE_PATH={$tmpStorage}");
-
-$_ENV['APP_CONFIG_CACHE'] = "{$tmpCache}/config.php";
-$_ENV['APP_EVENTS_CACHE'] = "{$tmpCache}/events.php";
-$_ENV['APP_PACKAGES_CACHE'] = "{$tmpCache}/packages.php";
-$_ENV['APP_ROUTES_CACHE'] = "{$tmpCache}/routes.php";
-$_ENV['APP_SERVICES_CACHE'] = "{$tmpCache}/services.php";
-$_ENV['VIEW_COMPILED_PATH'] = "{$tmpStorage}/framework/views";
-$_ENV['LARAVEL_STORAGE_PATH'] = $tmpStorage;
-
-$_SERVER['APP_CONFIG_CACHE'] = "{$tmpCache}/config.php";
-$_SERVER['APP_EVENTS_CACHE'] = "{$tmpCache}/events.php";
-$_SERVER['APP_PACKAGES_CACHE'] = "{$tmpCache}/packages.php";
-$_SERVER['APP_ROUTES_CACHE'] = "{$tmpCache}/routes.php";
-$_SERVER['APP_SERVICES_CACHE'] = "{$tmpCache}/services.php";
-$_SERVER['VIEW_COMPILED_PATH'] = "{$tmpStorage}/framework/views";
-$_SERVER['LARAVEL_STORAGE_PATH'] = $tmpStorage;
-
-// 3. Fallback driver settings for serverless
-if (!getenv('CACHE_DRIVER')) {
-    putenv('CACHE_DRIVER=array');
-    $_ENV['CACHE_DRIVER'] = 'array';
-    $_SERVER['CACHE_DRIVER'] = 'array';
+// 2. Prepare SQLite file in /tmp if not present
+if (!file_exists('/tmp/database.sqlite')) {
+    @touch('/tmp/database.sqlite');
 }
-if (!getenv('SESSION_DRIVER')) {
-    putenv('SESSION_DRIVER=cookie');
-    $_ENV['SESSION_DRIVER'] = 'cookie';
-    $_SERVER['SESSION_DRIVER'] = 'cookie';
-}
-if (!getenv('LOG_CHANNEL')) {
-    putenv('LOG_CHANNEL=stderr');
-    $_ENV['LOG_CHANNEL'] = 'stderr';
-    $_SERVER['LOG_CHANNEL'] = 'stderr';
+
+// 3. Set environment variables to point caches and storage to /tmp
+$envDefaults = [
+    'APP_ENV' => 'production',
+    'APP_KEY' => 'base64:cTBUjwDqOHwXKgi9HpkppQxoZ37Ch3S0DMnfE5xL4ZI=',
+    'APP_CONFIG_CACHE' => "{$tmpCache}/config.php",
+    'APP_EVENTS_CACHE' => "{$tmpCache}/events.php",
+    'APP_PACKAGES_CACHE' => "{$tmpCache}/packages.php",
+    'APP_ROUTES_CACHE' => "{$tmpCache}/routes.php",
+    'APP_SERVICES_CACHE' => "{$tmpCache}/services.php",
+    'VIEW_COMPILED_PATH' => "{$tmpStorage}/framework/views",
+    'LARAVEL_STORAGE_PATH' => $tmpStorage,
+    'CACHE_DRIVER' => 'array',
+    'SESSION_DRIVER' => 'cookie',
+    'LOG_CHANNEL' => 'stderr',
+    'DB_CONNECTION' => 'sqlite',
+    'DB_DATABASE' => '/tmp/database.sqlite',
+    'FIREBASE_API_KEY' => 'AIzaSyCuDdzt-rPaIMCvbygJsltvjqN-xU-Cffs',
+    'FIREBASE_AUTH_DOMAIN' => 'magang-brin-27225.firebaseapp.com',
+    'FIREBASE_DATABASE_URL' => 'https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app',
+    'FIREBASE_PROJECT_ID' => 'magang-brin-27225',
+    'FIREBASE_STORAGE_BUCKET' => 'magang-brin-27225.firebasestorage.app',
+    'FIREBASE_MESSAGING_SENDER_ID' => '667290386705',
+    'FIREBASE_APP_ID' => '1:667290386705:web:98d56d01ce1043fa114cb0',
+    'FIREBASE_MEASUREMENT_ID' => 'G-82QLN7Q97H',
+];
+
+foreach ($envDefaults as $key => $val) {
+    if (!getenv($key)) {
+        putenv("{$key}={$val}");
+        $_ENV[$key] = $val;
+        $_SERVER[$key] = $val;
+    }
 }
 
 // 4. Forward execution to Laravel's public entry point
