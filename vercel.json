@@ -46,6 +46,7 @@
     "CACHE_DRIVER": "array",
     "LOG_CHANNEL": "stderr",
     "SESSION_DRIVER": "cookie",
+    "SESSION_LIFETIME": "120",
     "DB_CONNECTION": "sqlite",
     "DB_DATABASE": "/tmp/database.sqlite",
     "FIREBASE_API_KEY": "AIzaSyCuDdzt-rPaIMCvbygJsltvjqN-xU-Cffs",

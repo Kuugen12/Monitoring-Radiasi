@@ -41,6 +41,7 @@ $envDefaults = [
     'LARAVEL_STORAGE_PATH' => $tmpStorage,
     'CACHE_DRIVER' => 'array',
     'SESSION_DRIVER' => 'cookie',
+    'SESSION_LIFETIME' => '120',
     'LOG_CHANNEL' => 'stderr',
     'DB_CONNECTION' => 'sqlite',
     'DB_DATABASE' => '/tmp/database.sqlite',
