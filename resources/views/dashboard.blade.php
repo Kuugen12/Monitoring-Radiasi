@@ -6,12 +6,8 @@
   <div class="topbar">
     <svg class="subicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
     <h1>Pantauan Radiasi</h1>
-    <button class="add-sensor" id="btnOpenAddZoneModal">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-      Tambah Zona
-    </button>
   </div>
-  <p class="page-sub">Pilih zona untuk melihat detail sensor.</p>
+  <p class="page-sub">Pilih detektor untuk melihat grafik riwayat dan detail sensor.</p>
 
   @if(session('success'))
     <div class="form-success" style="margin: 16px 32px 0;">
@@ -25,30 +21,38 @@
   @endif
 
   <section class="cards" id="cardsRoot">
-    @foreach($zones as $idx => $z)
+    @foreach($detectors as $id => $d)
       @php
-        $dotClass = $z['status'] === 'warn' ? 'warn' : '';
         $icons = [
           'box' => '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
           'server' => '<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="13" width="18" height="7" rx="1.5"/><circle cx="7" cy="7.5" r="1"/><circle cx="7" cy="16.5" r="1"/>',
           'drop' => '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'
         ];
       @endphp
-      <a href="{{ route('zone', $idx) }}" class="card" data-idx="{{ $idx }}" id="card-{{ $idx }}">
+      <a href="{{ route('zone', $id) }}" class="card" id="card-{{ $id }}">
         <div class="card-head">
           <div class="zone-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-              {!! $icons[$z['icon']] !!}
+              {!! $icons[$d['icon']] !!}
             </svg>
           </div>
-          <h3>{{ $z['name'] }}</h3>
-          <div class="pulse-dot {{ $dotClass }}"><span class="ring"></span><span class="core"></span></div>
+          <h3>{{ $d['name'] }}</h3>
+          <div class="pulse-dot" id="dot-{{ $id }}"><span class="ring"></span><span class="core"></span></div>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         </div>
         <div class="metrics">
-          <div class="metric"><div class="mlabel">RATE</div><div class="mval"><span class="val-rate">{{ number_format($z['rate'], 0) }}</span><span class="unit">cpm</span></div></div>
-          <div class="metric"><div class="mlabel">DOSE RATE</div><div class="mval"><span class="val-doseRate">{{ number_format($z['doseRate'], 2) }}</span><span class="unit">µSv/h</span></div></div>
-          <div class="metric"><div class="mlabel">TOTAL</div><div class="mval"><span class="val-total">{{ number_format($z['total'], 2) }}</span><span class="unit">mSv</span></div></div>
+          <div class="metric">
+            <div class="mlabel">RATE</div>
+            <div class="mval"><span class="val-rate" id="rate-{{ $id }}">-</span><span class="unit">cpm</span></div>
+          </div>
+          <div class="metric">
+            <div class="mlabel">DOSE RATE</div>
+            <div class="mval"><span class="val-doseRate" id="dose-{{ $id }}">-</span><span class="unit">µSv/h</span></div>
+          </div>
+          <div class="metric">
+            <div class="mlabel">TOTAL</div>
+            <div class="mval"><span class="val-total" id="total-{{ $id }}">-</span><span class="unit">mSv</span></div>
+          </div>
         </div>
         <div class="spark">
           <svg viewBox="0 0 300 32" preserveAspectRatio="none">
@@ -60,112 +64,121 @@
     @endforeach
   </section>
 
-  <footer class="hint">Data bersifat simulasi untuk keperluan desain ulang dashboard.</footer>
-
-  <!-- Modal Tambah Zona Baru -->
-  <div class="modal-overlay" id="addZoneModal">
-    <div class="modal-container">
-      <h2>Tambah Zona Baru</h2>
-      <form action="{{ route('zone.store') }}" method="POST" class="modal-form">
-        @csrf
-        <div class="field">
-          <label for="zone_name">Nama Zona</label>
-          <input type="text" name="name" id="zone_name" placeholder="cth. Zona D — Ruang Server" required autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="zone_icon">Ikon</label>
-          <select name="icon" id="zone_icon" required>
-            <option value="box">Kotak (Gudang)</option>
-            <option value="server">Server (R. Kontrol)</option>
-            <option value="drop">Tetes Air (Laboratorium)</option>
-          </select>
-        </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-cancel" id="btnCancelAddZone">Batal</button>
-          <button type="submit" class="btn-submit">Tambah Zona</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <footer class="hint">Data terhubung langsung secara realtime dengan Firebase Realtime Database.</footer>
 @endsection
 
 @section('scripts')
+  <!-- Firebase Compatibility SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  
   <script>
-    const zones = @json($zones);
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: "{{ env('FIREBASE_API_KEY') }}",
+      authDomain: "{{ env('FIREBASE_AUTH_DOMAIN') }}",
+      databaseURL: "{{ env('FIREBASE_DATABASE_URL') }}",
+      projectId: "{{ env('FIREBASE_PROJECT_ID') }}",
+      storageBucket: "{{ env('FIREBASE_STORAGE_BUCKET') }}",
+      messagingSenderId: "{{ env('FIREBASE_MESSAGING_SENDER_ID') }}",
+      appId: "{{ env('FIREBASE_APP_ID') }}",
+      measurementId: "{{ env('FIREBASE_MEASUREMENT_ID') }}"
+    };
+    
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    
+    // Sparkline history records
+    const historyData = {
+      detektor1: [],
+      detektor2: [],
+      detektor3: [],
+      detektor4: []
+    };
 
-    function sparkPath(seed, w, h){
-      let pts = []; let v = 0.5;
-      for(let i=0;i<20;i++){
-        v += (Math.sin(seed + i*0.7) * 0.06) + (Math.random()-0.5)*0.03;
-        v = Math.max(0.15, Math.min(0.85, v));
-        pts.push([ (i/19)*w, h - v*h ]);
-      }
-      return pts.map((p,i)=> (i===0?'M':'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-    }
+    // Reference to detectors node
+    const detectorsRef = db.ref('detectors');
+    
+    // Listen for changes in Firebase in real-time
+    detectorsRef.on('value', (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
 
-    function updateSparks() {
-      zones.forEach((z, idx) => {
-        const card = document.getElementById(`card-${idx}`);
-        if(card) {
-          const path1 = card.querySelector('.spark-path-1');
-          const path2 = card.querySelector('.spark-path-2');
-          path1.setAttribute('d', sparkPath(idx*3 + Date.now()/100000, 300, 32));
-          path2.setAttribute('d', sparkPath(idx*3 + 9 + Date.now()/100000, 300, 32));
-        }
-      });
-    }
+      Object.keys(data).forEach((id) => {
+        const detData = data[id];
+        if (!detData) return;
 
-    function tick(){
-      zones.forEach((z, idx) => {
-        z.rate = Math.max(20, +(z.rate + (Math.random()-0.5)*10).toFixed(0));
-        z.doseRate = Math.max(0.05, +(z.doseRate + (Math.random()-0.5)*0.02).toFixed(2));
-        z.total = +(z.total + z.doseRate/3600*5).toFixed(2);
-        z.status = z.doseRate > 0.35 ? 'warn' : 'safe';
+        // Get elements
+        const rateEl = document.getElementById(`rate-${id}`);
+        const doseEl = document.getElementById(`dose-${id}`);
+        const totalEl = document.getElementById(`total-${id}`);
+        const dotEl = document.getElementById(`dot-${id}`);
 
-        const card = document.getElementById(`card-${idx}`);
-        if(card) {
-          card.querySelector('.val-rate').textContent = z.rate;
-          card.querySelector('.val-doseRate').textContent = z.doseRate.toFixed(2);
-          card.querySelector('.val-total').textContent = z.total.toFixed(2);
-          
-          const dot = card.querySelector('.pulse-dot');
-          if (z.status === 'warn') {
-            dot.classList.add('warn');
+        // Extract values
+        const rate = (typeof detData.rate === 'number') ? detData.rate.toFixed(1) : '-';
+        const doseRate = (typeof detData.dose_rate === 'number') ? detData.dose_rate.toFixed(2) : '-';
+        const total = (typeof detData.total === 'number') ? detData.total.toFixed(2) : '-';
+        const status = (detData.dose_rate > 0.35) ? 'warn' : 'safe';
+
+        // Update HTML
+        if (rateEl) rateEl.textContent = rate;
+        if (doseEl) doseEl.textContent = doseRate;
+        if (totalEl) totalEl.textContent = total;
+
+        if (dotEl) {
+          if (status === 'warn') {
+            dotEl.classList.add('warn');
           } else {
-            dot.classList.remove('warn');
+            dotEl.classList.remove('warn');
+          }
+        }
+
+        // Push to spark history
+        if (typeof detData.rate === 'number') {
+          historyData[id].push(detData.rate);
+          if (historyData[id].length > 20) {
+            historyData[id].shift();
           }
         }
       });
-      updateSparks();
+
+      updateAllSparks();
+    });
+
+    // Generate SVG path for sparklines
+    function sparkPath(dataArr, w, h) {
+      if (dataArr.length === 0) return '';
+      const min = Math.min(...dataArr);
+      const max = Math.max(...dataArr);
+      const range = max - min || 1;
+      
+      let pts = [];
+      for (let i = 0; i < dataArr.length; i++) {
+        const val = dataArr[i];
+        const normalized = (val - min) / range;
+        const x = (i / (dataArr.length - 1 || 1)) * w;
+        const y = h - (normalized * 0.7 + 0.15) * h;
+        pts.push([x, y]);
+      }
+      return pts.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     }
 
-    updateSparks();
-    setInterval(tick, 5000);
-
-    // Modal Interaction
-    const modal = document.getElementById('addZoneModal');
-    const btnOpen = document.getElementById('btnOpenAddZoneModal');
-    const btnCancel = document.getElementById('btnCancelAddZone');
-
-    if (btnOpen && modal) {
-      btnOpen.addEventListener('click', () => {
-        modal.classList.add('show');
-        document.getElementById('zone_name').value = '';
-        document.getElementById('zone_name').focus();
-      });
-    }
-
-    if (btnCancel && modal) {
-      btnCancel.addEventListener('click', () => {
-        modal.classList.remove('show');
-      });
-    }
-
-    // Close modal when clicking outside the container
-    if (modal) {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-          modal.classList.remove('show');
+    function updateAllSparks() {
+      Object.keys(historyData).forEach((id) => {
+        const card = document.getElementById(`card-${id}`);
+        if (card) {
+          const path1 = card.querySelector('.spark-path-1');
+          const path2 = card.querySelector('.spark-path-2');
+          const data = historyData[id];
+          
+          if (data.length > 1) {
+            path1.setAttribute('d', sparkPath(data, 300, 32));
+            
+            // Draw average line
+            const avg = data.reduce((a, b) => a + b, 0) / data.length;
+            const avgData = new Array(data.length).fill(avg);
+            path2.setAttribute('d', sparkPath(avgData, 300, 32));
+          }
         }
       });
     }

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', $zone['name'] . ' — RadiaTrack')
+@section('title', $detector['name'] . ' — RadiaTrack')
 
 @section('content')
   @php
@@ -17,198 +17,286 @@
       Dashboard
     </a>
   </div>
+  
   <div class="topbar" style="padding-top:6px;">
     <div class="zone-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-        {!! $icons[$zone['icon']] !!}
+        {!! $icons[$detector['icon']] !!}
       </svg>
     </div>
-    <h1>{{ $zone['name'] }}</h1>
-    <button class="add-sensor" id="addSensorBtn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
-      Tambah Sensor
-    </button>
+    <h1>{{ $detector['name'] }}</h1>
   </div>
 
-  <section class="panel">
-    <div class="panel-head">
-      <h2>Data Sensor</h2>
-      <div class="live-dot">LIVE</div>
+  <!-- Realtime Live Display -->
+  <section class="cards" style="padding: 16px 32px 0; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+    <div class="card" style="cursor: default; pointer-events: none; border-color: var(--border);">
+      <div class="card-head">
+        <h3>LIVE RATE</h3>
+        <div class="pulse-dot" style="margin-left: auto;"><span class="ring"></span><span class="core"></span></div>
+      </div>
+      <div class="metrics" style="grid-template-columns: 1fr;">
+        <div class="metric"><div class="mval" id="liveRate" style="color: var(--accent);">- cpm</div></div>
+      </div>
     </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>No</th>
-            <th>Name</th>
-            <th>Time</th>
-            <th>Count Rate</th>
-            <th>AVG Count</th>
-            <th>Dose Rate</th>
-            <th>AVG Dose</th>
-            <th>Total</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="zoneTableBody">
-          <!-- Dynamically filled by JavaScript -->
-        </tbody>
-      </table>
+    <div class="card" style="cursor: default; pointer-events: none; border-color: var(--border);">
+      <div class="card-head">
+        <h3>LIVE DOSE RATE</h3>
+        <div class="pulse-dot" style="margin-left: auto;"><span class="ring"></span><span class="core"></span></div>
+      </div>
+      <div class="metrics" style="grid-template-columns: 1fr;">
+        <div class="metric"><div class="mval" id="liveDose" style="color: var(--safe);">- µSv/h</div></div>
+      </div>
+    </div>
+    <div class="card" style="cursor: default; pointer-events: none; border-color: var(--border);">
+      <div class="card-head">
+        <h3>LIVE TOTAL DOSE</h3>
+        <div class="pulse-dot" style="margin-left: auto;"><span class="ring"></span><span class="core"></span></div>
+      </div>
+      <div class="metrics" style="grid-template-columns: 1fr;">
+        <div class="metric"><div class="mval" id="liveTotal" style="color: var(--warn);">- mSv</div></div>
+      </div>
     </div>
   </section>
 
-  <section class="panel">
+  <!-- History Chart -->
+  <section class="panel" style="margin-top: 24px;">
     <div class="panel-head">
-      <h2>Grafik Sensor — {{ $zone['name'] }}</h2>
+      <h2>Grafik Riwayat Sensor (Database Lokal)</h2>
     </div>
     <div class="chart-wrap">
       <canvas id="zoneChartCanvas"></canvas>
     </div>
   </section>
 
-  <footer class="hint">Data bersifat simulasi untuk keperluan desain ulang dashboard.</footer>
+  <!-- History Table -->
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Data Log Database 'magang' (Sync 40s)</h2>
+      <div class="live-dot" style="color: var(--muted);">DB LOGS</div>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Waktu Lokal</th>
+            <th>Rate (cpm)</th>
+            <th>Dose Rate (µSv/h)</th>
+            <th>Total (mSv)</th>
+            <th>Status</th>
+            <th>Waktu Firebase</th>
+          </tr>
+        </thead>
+        <tbody id="zoneTableBody">
+          <!-- Populated dynamically and reversed (newest on top) -->
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="hint">Grafik dan tabel di atas memuat data riil yang disinkronkan ke database lokal 'magang' phpMyAdmin.</footer>
 @endsection
 
 @section('scripts')
+  <!-- Firebase Compatibility SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
   <script>
-    const zoneId = {{ $zoneId }};
-    const zoneMeta = @json($zone);
+    // Initialize Firebase
+    const firebaseConfig = {
+      apiKey: "{{ env('FIREBASE_API_KEY') }}",
+      authDomain: "{{ env('FIREBASE_AUTH_DOMAIN') }}",
+      databaseURL: "{{ env('FIREBASE_DATABASE_URL') }}",
+      projectId: "{{ env('FIREBASE_PROJECT_ID') }}",
+      storageBucket: "{{ env('FIREBASE_STORAGE_BUCKET') }}",
+      messagingSenderId: "{{ env('FIREBASE_MESSAGING_SENDER_ID') }}",
+      appId: "{{ env('FIREBASE_APP_ID') }}",
+      measurementId: "{{ env('FIREBASE_MEASUREMENT_ID') }}"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const detectorId = "{{ $detectorId }}";
+    let readings = @json($readings);
+    let readingsList = Array.isArray(readings) ? readings : Object.values(readings);
     let zoneChart = null;
 
-    function seedZoneRows(){
-      const nodeLetter = String.fromCharCode(65 + zoneId);
-      const rows = [];
-      for(let i=0; i<6; i++){
-        const jitter = (v,f) => +(v*(1+(Math.random()-0.5)*f));
-        const cr = jitter(zoneMeta.rate, 0.15);
-        const dr = jitter(zoneMeta.doseRate, 0.18);
-        rows.push({
-          no: i+1,
-          name: `Node ${nodeLetter}${i+1}`,
-          time: new Date(Date.now() - i*60000).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-          countRate: cr,
-          avgCount: cr*(0.95+Math.random()*0.1),
-          doseRate: dr,
-          avgDose: dr*(0.95+Math.random()*0.1),
-          total: jitter(zoneMeta.total, 0.06)
-        });
+    // Listen to Firebase Realtime Database for Live metrics
+    const detectorRef = db.ref('detectors/' + detectorId);
+    detectorRef.on('value', (snapshot) => {
+      const val = snapshot.val();
+      if (!val) return;
+
+      const rateEl = document.getElementById('liveRate');
+      const doseEl = document.getElementById('liveDose');
+      const totalEl = document.getElementById('liveTotal');
+
+      const rate = (typeof val.rate === 'number') ? val.rate : 0.0;
+      const doseRate = (typeof val.dose_rate === 'number') ? val.dose_rate : 0.0;
+      const total = (typeof val.total === 'number') ? val.total : 0.0;
+
+      if (rateEl) rateEl.textContent = rate.toFixed(1) + ' cpm';
+      if (doseEl) doseEl.textContent = doseRate.toFixed(2) + ' µSv/h';
+      if (totalEl) totalEl.textContent = total.toFixed(2) + ' mSv';
+
+      // Push new reading to the chart and table in real-time
+      const now = new Date();
+      const newReading = {
+        id: Date.now(),
+        created_at: now.toISOString(),
+        rate: rate,
+        dose_rate: doseRate,
+        total: total,
+        status: (doseRate > 0.35) ? 'warn' : 'safe',
+        firebase_last_updated: val.last_updated || Date.now()
+      };
+
+      // Avoid duplication if the callback triggers on the same timestamp
+      const lastReading = readingsList[readingsList.length - 1];
+      const lastTime = lastReading ? new Date(lastReading.created_at || lastReading.updated_at) : null;
+      if (!lastTime || Math.abs(now - lastTime) > 800) {
+        readingsList.push(newReading);
+        if (readingsList.length > 20) {
+          readingsList.shift();
+        }
+        renderTableAndChart(readingsList);
       }
-      return rows;
+    });
+
+    // Populate table and render chart initially
+    function renderTableAndChart(data) {
+      // 1. Table Render (Newest at the top)
+      const tbody = document.getElementById('zoneTableBody');
+      if (tbody) {
+        if (data.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--muted-2);">Belum ada data disinkronkan ke database lokal.</td></tr>`;
+        } else {
+          // Copy and reverse for showing newest first in the table
+          const sorted = [...data].reverse();
+          tbody.innerHTML = sorted.map((r, idx) => {
+            const localTime = new Date(r.created_at).toLocaleString('id-ID');
+            const firebaseTime = r.firebase_last_updated ? new Date(Number(r.firebase_last_updated)).toLocaleString('id-ID') : '-';
+            const elevated = r.status === 'warn';
+            return `
+              <tr>
+                <td>${idx + 1}</td>
+                <td>${localTime}</td>
+                <td class="num">${Number(r.rate).toFixed(1)}</td>
+                <td class="num">${Number(r.dose_rate).toFixed(2)}</td>
+                <td class="num">${Number(r.total).toFixed(2)}</td>
+                <td>
+                  <span class="status-chip ${elevated ? 'elevated' : 'normal'}">
+                    ${elevated ? 'Elevated' : 'Normal'}
+                  </span>
+                </td>
+                <td>${firebaseTime}</td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      // 2. Chart Render (Chronological order)
+      if (zoneChart) {
+        zoneChart.data.labels = data.map(r => {
+          const date = new Date(r.created_at);
+          return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        });
+        zoneChart.data.datasets[0].data = data.map(r => Number(r.rate));
+        zoneChart.data.datasets[1].data = data.map(r => Number(r.dose_rate));
+        zoneChart.update();
+      }
     }
 
-    let rows = seedZoneRows();
-
-    function renderZoneTable(){
-      const body = document.getElementById('zoneTableBody');
-      if(!body) return;
-      body.innerHTML = rows.map(r => {
-        const elevated = r.doseRate > zoneMeta.doseRate * 1.25;
-        return `
-        <tr>
-          <td>${r.no}</td>
-          <td>${r.name}</td>
-          <td>${r.time}</td>
-          <td class="num">${r.countRate.toFixed(0)}</td>
-          <td class="num">${r.avgCount.toFixed(0)}</td>
-          <td class="num">${r.doseRate.toFixed(2)}</td>
-          <td class="num">${r.avgDose.toFixed(2)}</td>
-          <td class="num">${r.total.toFixed(2)}</td>
-          <td><span class="status-chip ${elevated ? 'elevated' : 'normal'}">${elevated ? 'Elevated' : 'Normal'}</span></td>
-        </tr>`;
-      }).join('');
-    }
-
-    function renderZoneChart(){
-      const chartRows = [...rows].reverse();
+    // Initialize Chart.js
+    function initChart() {
       const ctx = document.getElementById('zoneChartCanvas').getContext('2d');
-      if(zoneChart) zoneChart.destroy();
       zoneChart = new Chart(ctx, {
         type: 'line',
         data: {
-          labels: chartRows.map(r => r.time),
+          labels: [],
           datasets: [
             {
               label: 'Count Rate (cpm)',
-              data: chartRows.map(r => +r.countRate.toFixed(1)),
+              data: [],
               borderColor: '#ffc53d',
-              backgroundColor: 'rgba(255,197,61,0.08)',
-              borderWidth: 2, pointRadius: 2, tension: 0.35, yAxisID: 'y'
+              backgroundColor: 'rgba(255,197,61,0.04)',
+              borderWidth: 2.2,
+              pointRadius: 3,
+              pointBackgroundColor: '#ffc53d',
+              tension: 0.35,
+              yAxisID: 'y'
             },
             {
               label: 'Dose Rate (µSv/h)',
-              data: chartRows.map(r => +r.doseRate.toFixed(2)),
+              data: [],
               borderColor: '#38d996',
-              backgroundColor: 'rgba(56,217,150,0.08)',
-              borderWidth: 2, pointRadius: 2, tension: 0.35, yAxisID: 'y1'
+              backgroundColor: 'rgba(56,217,150,0.04)',
+              borderWidth: 2.2,
+              pointRadius: 3,
+              pointBackgroundColor: '#38d996',
+              tension: 0.35,
+              yAxisID: 'y1'
             }
           ]
         },
         options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display: true, labels: { color: '#7c8798', font:{family:"'Inter'", size:11} } } },
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                color: 'var(--muted)',
+                font: { family: "'Inter'", size: 12 }
+              }
+            }
+          },
           scales: {
-            x: { grid: { color: '#1c2531' }, ticks: { color: '#7c8798', font:{family:"'IBM Plex Mono'", size:10} } },
-            y: { position:'left', grid: { color: '#1c2531' }, ticks: { color: '#ffc53d', font:{family:"'IBM Plex Mono'", size:10} } },
-            y1: { position:'right', grid: { display:false }, ticks: { color: '#38d996', font:{family:"'IBM Plex Mono'", size:10} } }
+            x: {
+              grid: { color: 'var(--border)' },
+              ticks: { color: 'var(--muted)', font: { family: "'IBM Plex Mono'", size: 10 } }
+            },
+            y: {
+              position: 'left',
+              grid: { color: 'var(--border)' },
+              ticks: { color: '#ffc53d', font: { family: "'IBM Plex Mono'", size: 10 } }
+            },
+            y1: {
+              position: 'right',
+              grid: { display: false },
+              ticks: { color: '#38d996', font: { family: "'IBM Plex Mono'", size: 10 } }
+            }
           }
         }
       });
     }
 
-    function tick(){
-      zoneMeta.rate = Math.max(20, +(zoneMeta.rate + (Math.random()-0.5)*10).toFixed(0));
-      zoneMeta.doseRate = Math.max(0.05, +(zoneMeta.doseRate + (Math.random()-0.5)*0.02).toFixed(2));
-      zoneMeta.total = +(zoneMeta.total + zoneMeta.doseRate/3600*5).toFixed(2);
+    // Initialize layout
+    initChart();
+    renderTableAndChart(readingsList);
 
-      const nodeLetter = String.fromCharCode(65 + zoneId);
-      const jitter = (v,f) => +(v*(1+(Math.random()-0.5)*f));
-      const cr = jitter(zoneMeta.rate, 0.15);
-      const dr = jitter(zoneMeta.doseRate, 0.18);
-      
-      rows.unshift({
-        no: rows[0].no + 1,
-        name: `Node ${nodeLetter}${Math.ceil(Math.random()*3)}`,
-        time: new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-        countRate: cr,
-        avgCount: cr*(0.95+Math.random()*0.1),
-        doseRate: dr,
-        avgDose: dr*(0.95+Math.random()*0.1),
-        total: jitter(zoneMeta.total, 0.06)
-      });
-      rows = rows.slice(0, 6);
-
-      renderZoneTable();
-      renderZoneChart();
+    // Poll database for new records every 10 seconds
+    let lastFetchedId = readingsList.length > 0 ? readingsList[readingsList.length - 1].id : 0;
+    
+    function checkForUpdates() {
+      fetch("/detector/" + detectorId + "/history")
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const latest = data[data.length - 1];
+            if (latest.id !== lastFetchedId) {
+              lastFetchedId = latest.id;
+              readingsList = data;
+              renderTableAndChart(readingsList);
+            }
+          }
+        })
+        .catch(err => console.error("Error polling history:", err));
     }
 
-    document.getElementById('addSensorBtn').addEventListener('click', () => {
-      const nodeLetter = String.fromCharCode(65 + zoneId);
-      const nextNo = rows.length > 0 ? Math.max(...rows.map(r => r.no)) + 1 : 1;
-      
-      const jitter = (v,f) => +(v*(1+(Math.random()-0.5)*f));
-      const cr = jitter(zoneMeta.rate, 0.15);
-      const dr = jitter(zoneMeta.doseRate, 0.18);
-      
-      const newNode = {
-        no: nextNo,
-        name: `Node ${nodeLetter}${nextNo}`,
-        time: new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
-        countRate: cr,
-        avgCount: cr*(0.95+Math.random()*0.1),
-        doseRate: dr,
-        avgDose: dr*(0.95+Math.random()*0.1),
-        total: jitter(zoneMeta.total, 0.06)
-      };
-      
-      rows.unshift(newNode);
-      rows = rows.slice(0, 6);
-      
-      renderZoneTable();
-      renderZoneChart();
-    });
-
-    renderZoneTable();
-    renderZoneChart();
-    setInterval(tick, 5000);
+    setInterval(checkForUpdates, 10000);
   </script>
 @endsection

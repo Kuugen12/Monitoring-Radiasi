@@ -1,0 +1,1601 @@
+@extends('layouts.app')
+
+@section('title', 'RADIOSCAN MATRIX v2.0 — 72-Ch Radiation Array Detector')
+
+@section('styles')
+  <link rel="stylesheet" href="{{ asset('css/matrix.css') }}">
+@endsection
+
+@section('content')
+<div class="matrix-layout">
+
+  <!-- ========================================================================
+       1. TOP SCIENTIFIC HUD HEADER
+       ======================================================================== -->
+  <header class="matrix-header">
+    <div class="matrix-brand">
+      <div class="nuclear-badge" title="72-Channel Radiation Detector Array">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2a10 10 0 0 0-4.9 1.3l2.5 4.3A5 5 0 0 1 12 7V2zM16.9 3.3A10 10 0 0 0 12 2v5a5 5 0 0 1 2.5.7l2.4-4.4zM2.3 14.1a10 10 0 0 0 2.6 4.1l3.7-3.3A5 5 0 0 1 7 12H2c0 .7.1 1.4.3 2.1zM2.3 9.9H7a5 5 0 0 1 1.6-2.9L4.9 3.7A10 10 0 0 0 2.3 9.9zM21.7 9.9A10 10 0 0 0 19.1 3.7l-3.7 3.3A5 5 0 0 1 17 12h5c0-.7-.1-1.4-.3-2.1zM15.4 14.9l3.7 3.3a10 10 0 0 0 2.6-4.1H17a5 5 0 0 1-1.6 2.9zM7.1 20.7A10 10 0 0 0 12 22v-5a5 5 0 0 1-2.5-.7l-2.4 4.4zM16.9 20.7l-2.5-4.4A5 5 0 0 1 12 17v5a10 10 0 0 0 4.9-1.3z"/>
+        </svg>
+      </div>
+      <div class="matrix-title-group">
+        <h1>RADIOSCAN <span class="brand-accent">MATRIX</span></h1>
+        <span class="version-pill">v2.0 PRO</span>
+      </div>
+    </div>
+
+    <!-- HUD Status Chips & Modules -->
+    <div class="header-hud-bar">
+      <div class="hud-chip live-chip" id="liveStatusBadge">
+        <span class="live-indicator-dot" id="livePulseDot"></span>
+        <span id="liveStatusText">1.0 Hz</span>
+      </div>
+
+      <div class="module-status-cluster">
+        <div class="module-chip xs1 online" id="pillXS1" title="Xiao Seeed 1 (D01–D24)">
+          <span class="mod-dot"></span>
+          <span class="mod-name">XS1</span>
+        </div>
+        <div class="module-chip xs2 online" id="pillXS2" title="Xiao Seeed 2 (D25–D48)">
+          <span class="mod-dot"></span>
+          <span class="mod-name">XS2</span>
+        </div>
+        <div class="module-chip xs3 online" id="pillXS3" title="Xiao Seeed 3 (D49–D72)">
+          <span class="mod-dot"></span>
+          <span class="mod-name">XS3</span>
+        </div>
+      </div>
+
+      <div class="hud-chip">
+        <span>PORT:</span> <strong id="headerComPort" style="color:#fff;">COM5</strong>
+      </div>
+      <div class="hud-chip">
+        <span>BAUD:</span> <strong id="headerBaudrate" style="color:#fff;">115200</strong>
+      </div>
+      <div class="hud-chip progress-chip">
+        <span>Z-STEP:</span> <strong id="headerHeightProgress">0 / 10</strong>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================================
+       2. CONTROL DECK & COMMAND RIBBON
+       ======================================================================== -->
+  <div class="control-deck">
+    <div class="command-btn-group">
+      <button class="btn-action btn-start" id="btnStartScan" onclick="startScanning()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>START SCAN</span>
+      </button>
+      <button class="btn-action btn-pause" id="btnPauseScan" onclick="pauseScanning()" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        <span id="pauseBtnLabel">PAUSE</span>
+      </button>
+      <button class="btn-action btn-reset" id="btnStopScan" onclick="stopScanning()" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+        <span>RESET</span>
+      </button>
+      <button class="btn-action btn-outline" id="btnForceExport" onclick="exportMatrixCsv()" title="Export acquired scan matrix to CSV">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>CSV</span>
+      </button>
+      <button class="btn-action btn-outline" onclick="exportMatrixDat()" title="Export formatted matrix to .DAT">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span>.DAT</span>
+      </button>
+    </div>
+
+    <!-- Quick Parameter Controls -->
+    <div class="params-bar">
+      <div class="param-pill" title="Total scanning height levels">
+        <label for="inputTotalHeight">Steps:</label>
+        <input type="number" id="inputTotalHeight" value="10" min="1" max="50" onchange="updateTotalHeights(this.value)">
+      </div>
+
+      <div class="param-pill" title="Sampling acquisition rate">
+        <label for="inputSamplingRate">Rate:</label>
+        <select id="inputSamplingRate" onchange="updateSamplingInterval(this.value)">
+          <option value="1000" selected>1.0 Hz (1s)</option>
+          <option value="500">2.0 Hz (500ms)</option>
+          <option value="2000">0.5 Hz (2s)</option>
+          <option value="100">10.0 Hz (Fast)</option>
+        </select>
+      </div>
+
+      <div class="param-pill" title="RS485 Modbus baudrate">
+        <label for="inputBaudrate">Baud:</label>
+        <select id="inputBaudrate" onchange="document.getElementById('headerBaudrate').textContent = this.value">
+          <option value="115200" selected>115200</option>
+          <option value="9600">9600</option>
+          <option value="57600">57600</option>
+        </select>
+      </div>
+
+      <div class="param-pill" title="Hotspot radiation threshold in CPS">
+        <label for="inputHotspotThreshold">Hotspot &gt;:</label>
+        <input type="number" id="inputHotspotThreshold" value="100" min="50" max="1000" onchange="updateThreshold(this.value)">
+        <span style="font-size:10px;color:var(--text-muted);">CPS</span>
+      </div>
+
+      <!-- Firebase Cloud Sync Switch -->
+      <div class="cloud-sync-pill active" id="fbSyncToggle" onclick="toggleFirebaseSync()" title="Realtime Firebase Database synchronization">
+        <div class="toggle-switch-dot"></div>
+        <span>Cloud Sync</span>
+        <span class="latency-tag" id="syncLatencyText">12ms</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================
+       3. MAIN WORKSPACE (SIDEBAR + CENTER VIEWPORT)
+       ======================================================================== -->
+  <div class="matrix-workspace">
+
+    <!-- LEFT SIDEBAR: SCAN LOOPS & DETECTOR ARRAY MAP -->
+    <aside class="matrix-sidebar">
+      
+      <!-- Loop Selection Panel -->
+      <div class="panel-card">
+        <div class="panel-head">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            SCAN LOOPS
+          </h3>
+          <span class="panel-badge" id="sidebarLoopCountText">10 Loops</span>
+        </div>
+
+        <div class="loop-scroll-list" id="loopListContainer">
+          <!-- Dynamic clean loop items (L01, L02... L10) -->
+        </div>
+
+        <div class="loop-btn-bar">
+          <button class="btn-micro" onclick="selectAllLoops(true)">ALL</button>
+          <button class="btn-micro" onclick="selectAllLoops(false)">NONE</button>
+        </div>
+      </div>
+
+      <!-- Detector Array (Channel Order & Individual Readings) -->
+      <div class="panel-card">
+        <div class="panel-head">
+          <h3>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            DETECTOR ARRAY (CHANNEL ORDER)
+          </h3>
+          <span class="panel-badge">72 Channels</span>
+        </div>
+
+        <div class="detector-array-panel">
+          <!-- Module Ranges Overview -->
+          <div class="mod-summary-cards">
+            <div class="mod-summary-card xs1">
+              <div class="mod-info-left">
+                <span class="mod-title-tag">XS1 (Addr 0x01):</span>
+                <span class="mod-range-tag">D01 — D24</span>
+              </div>
+              <span class="mod-avg-val" id="modAvgXS1">-- CPS</span>
+            </div>
+
+            <div class="mod-summary-card xs2">
+              <div class="mod-info-left">
+                <span class="mod-title-tag">XS2 (Addr 0x02):</span>
+                <span class="mod-range-tag">D25 — D48</span>
+              </div>
+              <span class="mod-avg-val" id="modAvgXS2">-- CPS</span>
+            </div>
+
+            <div class="mod-summary-card xs3">
+              <div class="mod-info-left">
+                <span class="mod-title-tag">XS3 (Addr 0x03):</span>
+                <span class="mod-range-tag">D49 — D72</span>
+              </div>
+              <span class="mod-avg-val" id="modAvgXS3">-- CPS</span>
+            </div>
+          </div>
+
+          <!-- Channel Order Exact Sequence Text Box -->
+          <div class="channel-order-code-box" title="Urutan Saluran Sensor Detektor (D1..D72)">
+            (D1, D2, D3, D4, D5, D6, D7, D8, D9, D10, D11, D12, D13, D14, D15, D16, D17, D18, D19, D20, D21, D22, D23, D24, D25, D26, D27, D28, D29, D30, D31, D32, D33, D34, D35, D36, D37, D38, D39, D40, D41, D42, D43, D44, D45, D46, D47, D48, D49, D50, D51, D52, D53, D54, D55, D56, D57, D58, D59, D60, D61, D62, D63, D64, D65, D66, D67, D68, D69, D70, D71, D72)
+          </div>
+
+          <!-- Individual 72-Channels Live Readings Grid (Satu per satu data detector) -->
+          <div class="individual-channels-box">
+            <div class="individual-head-row">
+              <span style="font-weight:700;">Live Sensor Readout (D01–D72)</span>
+              <span id="stripActiveChannelCount" style="color:var(--text-muted);">72 Channels</span>
+            </div>
+            <div class="individual-channels-scroll" id="individualChannelsContainer">
+              <!-- Dynamically populated 72 individual channel chips -->
+            </div>
+          </div>
+
+          <!-- 72-Detector Micro Activity Strip -->
+          <div class="linear-array-visual-strip">
+            <div class="strip-label-row">
+              <span>Linear Array Map</span>
+              <span style="color:#60A5FA;">1 &rarr; 72</span>
+            </div>
+            <div class="detector-dots-grid" id="detectorDotsGrid" title="Real-time 72-channel sensor activity">
+              <!-- Dynamically populated 72 micro cells -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- CENTER MAIN VIEWPORT -->
+    <main class="matrix-main-viewport">
+
+      <!-- Viewport Navigation & Palette Toolbar -->
+      <div class="viewport-topbar">
+        <div class="segmented-tabs">
+          <button class="tab-pill-btn active" id="tabBtnMatrix" onclick="switchViewMode('matrix')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+            Matrix
+          </button>
+          <button class="tab-pill-btn" id="tabBtnContour" onclick="switchViewMode('contour')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            Contour
+          </button>
+          <button class="tab-pill-btn" id="tabBtnGrid" onclick="switchViewMode('grid')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            8&times;9 Grid
+          </button>
+          <button class="tab-pill-btn" id="tabBtnRawTable" onclick="switchViewMode('table')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Data Table
+          </button>
+        </div>
+
+        <div class="palette-picker">
+          <span>Palette:</span>
+          <select id="paletteSelect" onchange="changeColorPalette(this.value)">
+            <option value="turbo" selected>Turbo (Scientific)</option>
+            <option value="jet">Jet / Rainbow</option>
+            <option value="viridis">Viridis</option>
+            <option value="magma">Magma</option>
+            <option value="thermal">Thermal IR</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Centerpiece: 2D Dynamic Heatmap Card -->
+      <div class="heatmap-stage-card" id="heatmapMainCard">
+        <!-- Module Zone Markers -->
+        <div class="module-marker-strip">
+          <div class="mod-marker xs1">XS1: 01 &ndash; 24 (0 &ndash; 266 cm)</div>
+          <div class="mod-marker xs2">XS2: 25 &ndash; 48 (267 &ndash; 533 cm)</div>
+          <div class="mod-marker xs3">XS3: 49 &ndash; 72 (534 &ndash; 800 cm)</div>
+        </div>
+
+        <!-- Heatmap Canvas Stage -->
+        <div class="canvas-viewport-wrapper" id="canvasContainer">
+          <canvas id="matrixHeatmapCanvas" width="1100" height="400"></canvas>
+          
+          <!-- Floating Glass Tooltip -->
+          <div class="matrix-tooltip" id="matrixTooltip">
+            <div class="tt-head">
+              <span class="tt-det-title" id="ttDetectorName">Detector D38</span>
+              <span class="tt-mod-tag" id="ttModuleTag">XS2 (0x02)</span>
+            </div>
+            <div class="tt-grid-info">
+              <div class="tt-stat-row">
+                <span>Height:</span>
+                <span class="tt-val" id="ttHeightLevel">Loop 5 (175 cm)</span>
+              </div>
+              <div class="tt-stat-row">
+                <span>Pos (X, Z):</span>
+                <span class="tt-val" id="ttCoordinates">422 cm, 175 cm</span>
+              </div>
+              <div class="tt-stat-row">
+                <span>Counts:</span>
+                <span class="tt-val" id="ttCpsValue" style="color:#fbbf24;font-weight:700;">285 CPS</span>
+              </div>
+              <div class="tt-stat-row">
+                <span>Dose Rate:</span>
+                <span class="tt-val" id="ttDoseRate">3.42 &micro;Sv/h</span>
+              </div>
+              <div class="tt-stat-row">
+                <span>Status:</span>
+                <span class="tt-val" id="ttStatus">HOTSPOT</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Table Viewport (Alternative Mode) -->
+        <div class="raw-table-wrapper" id="matrixTableView" style="display:none;padding:12px;">
+          <table class="matrix-raw-table" id="rawMatrixTable">
+            <thead>
+              <tr id="tableHeaderRow"></tr>
+            </thead>
+            <tbody id="tableBodyRows"></tbody>
+          </table>
+        </div>
+
+        <!-- Colorbar Gradient Legend Strip -->
+        <div class="colorbar-container">
+          <span>0 CPS</span>
+          <div class="colorbar-track" id="colorbarGradient"></div>
+          <span id="colorbarMaxLabel">350+ CPS (Hotspot)</span>
+        </div>
+      </div>
+
+      <!-- 3D Source Localization & Top View Spatial Cards -->
+      <div class="spatial-split-row">
+        <!-- 3D Source Position Estimator -->
+        <div class="hud-spatial-card">
+          <div class="spatial-head">
+            <span>3D Source Localization</span>
+            <span class="badge-live">Isometric Model</span>
+          </div>
+          <div class="canvas-spatial-stage" id="container3D">
+            <canvas id="canvas3D" width="500" height="220"></canvas>
+          </div>
+          <div class="spatial-hud-overlay">
+            <div class="hud-stat-box">
+              <div class="h-lbl">POS X</div>
+              <div class="h-val highlight" id="statPosX">412.5 cm</div>
+            </div>
+            <div class="hud-stat-box">
+              <div class="h-lbl">POS Y</div>
+              <div class="h-val highlight" id="statPosY">-32.7 cm</div>
+            </div>
+            <div class="hud-stat-box">
+              <div class="h-lbl">POS Z</div>
+              <div class="h-val highlight" id="statPosZ">186.4 cm</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top View X-Z Source Map & Info -->
+        <div class="hud-spatial-card">
+          <div class="spatial-head">
+            <span>Top-View Plane (X-Z)</span>
+            <span class="badge-live" id="statConfidence">96.2% Confidence</span>
+          </div>
+          <div class="canvas-spatial-stage">
+            <canvas id="canvasTopViewXZ" width="500" height="220"></canvas>
+          </div>
+          <div class="spatial-hud-overlay">
+            <div class="hud-stat-box">
+              <div class="h-lbl">CONFIDENCE</div>
+              <div class="h-val" id="statConfidenceVal" style="color:#34d399;">96.2%</div>
+            </div>
+            <div class="hud-stat-box">
+              <div class="h-lbl">METHOD</div>
+              <div class="h-val" style="color:#93c5fd;">Bayesian</div>
+            </div>
+            <div class="hud-stat-box">
+              <div class="h-lbl">PEAK DETECTOR</div>
+              <div class="h-val alert" id="statHotspotCount">XS2 (D38)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Metric Telemetry KPI Deck -->
+      <div class="telemetry-cards-row">
+        <div class="kpi-tile kpi-channels">
+          <div class="kpi-header">Total Channels</div>
+          <div class="kpi-number" id="metricTotalChannels">72 <span class="kpi-unit">Ch</span></div>
+          <div class="kpi-subtext">3x Xiao Modules</div>
+        </div>
+
+        <div class="kpi-tile kpi-loop">
+          <div class="kpi-header">Active Step</div>
+          <div class="kpi-number" id="metricActiveLoop">10 <span class="kpi-unit">/ 10</span></div>
+          <div class="kpi-subtext" id="metricElapsedTimer">Elapsed: 00:01:24</div>
+        </div>
+
+        <div class="kpi-tile kpi-peak">
+          <div class="kpi-header">Peak Intensity</div>
+          <div class="kpi-number" id="metricMaxCps">3245 <span class="kpi-unit">cps</span></div>
+          <div class="kpi-subtext" id="metricMaxChannel">Detector D43 (XS2)</div>
+        </div>
+
+        <div class="kpi-tile kpi-avg">
+          <div class="kpi-header">Average CPS</div>
+          <div class="kpi-number" id="metricAvgCps">174.2 <span class="kpi-unit">cps</span></div>
+          <div class="kpi-subtext" id="metricStdDev">Std Dev: 61.2</div>
+        </div>
+
+        <div class="kpi-tile kpi-total">
+          <div class="kpi-header">Total Counts</div>
+          <div class="kpi-number" id="metricTotalCounts">12,540 <span class="kpi-unit">cts</span></div>
+          <div class="kpi-subtext">Accumulated</div>
+        </div>
+
+        <div class="kpi-tile kpi-bg">
+          <div class="kpi-header">Background</div>
+          <div class="kpi-number" id="metricBgCps">31.4 <span class="kpi-unit">cps</span></div>
+          <div class="kpi-subtext">Base Radiation</div>
+        </div>
+      </div>
+
+      <!-- Bottom Split: Real-time Line Chart + Modbus Terminal Console -->
+      <div class="bottom-analytics-split">
+        <!-- Module Running CPS Chart -->
+        <div class="chart-panel-card">
+          <div class="panel-head" style="background:transparent;padding:0 0 8px 0;margin-bottom:4px;">
+            <h3>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+              REAL-TIME TELEMETRY (MODULE CPS)
+            </h3>
+            <span class="panel-badge">XS1 &bull; XS2 &bull; XS3</span>
+          </div>
+          <div class="chart-stage">
+            <canvas id="moduleChartCanvas"></canvas>
+          </div>
+        </div>
+
+        <!-- Raw RS485 Terminal Stream -->
+        <div class="terminal-window-card">
+          <div class="terminal-title-bar">
+            <div class="terminal-title">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              MODBUS RS485 LOG
+            </div>
+            <div class="terminal-controls">
+              <button class="btn-term-action" onclick="document.getElementById('terminalScreen').innerHTML=''">Clear</button>
+            </div>
+          </div>
+          <div class="terminal-console-body" id="terminalScreen">
+            <div class="log-entry"><span class="log-t">[08:00:00]</span> <span class="log-badge-ok">[INIT]</span> System Ready &bull; 72-Ch Matrix Active</div>
+            <div class="log-entry"><span class="log-t">[08:00:01]</span> <span class="log-badge-modbus">[MODBUS]</span> Connected COM5 @ 115200 baud</div>
+            <div class="log-entry"><span class="log-t">[08:00:02]</span> <span class="log-badge-ok">[POLL]</span> XS1 (0x01), XS2 (0x02), XS3 (0x03) verified</div>
+            <div class="log-entry"><span class="log-t">[08:00:03]</span> <span class="log-badge-warn">[STANDBY]</span> Ready for scan acquisition</div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+@endsection
+
+@section('scripts')
+<!-- Firebase Compatibility SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+<script>
+/* ==========================================================================
+   RADIOSCAN MATRIX v2.0 JAVASCRIPT CORE ENGINE
+   ========================================================================== */
+
+// 1. GLOBAL STATE & CONFIGURATION
+const APP_STATE = {
+  totalHeights: 10,
+  currentHeight: 0,
+  samplingIntervalMs: 1000,
+  hotspotThreshold: 100,
+  isScanning: false,
+  isPaused: false,
+  timerIntervalId: null,
+  scanIntervalId: null,
+  elapsedSeconds: 0,
+  useFirebase: true,
+  currentPalette: 'turbo',
+  viewMode: 'matrix', // 'matrix', 'contour', 'grid', 'table'
+  matrixData: [], // Array of rows: each row is 72 values
+  xs1History: [],
+  xs2History: [],
+  xs3History: [],
+  timestamps: [],
+  selectedLoops: new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+  estimatedSource: { x: 412.5, y: -32.7, z: 186.4, confidence: 96.2 }
+};
+
+// 2. FIREBASE REALTIME DB INITIALIZATION
+let firebaseDb = null;
+try {
+  const firebaseConfig = {
+    apiKey: "{{ env('FIREBASE_API_KEY') }}",
+    authDomain: "{{ env('FIREBASE_AUTH_DOMAIN') }}",
+    databaseURL: "{{ env('FIREBASE_DATABASE_URL') }}",
+    projectId: "{{ env('FIREBASE_PROJECT_ID') }}",
+    storageBucket: "{{ env('FIREBASE_STORAGE_BUCKET') }}",
+    messagingSenderId: "{{ env('FIREBASE_MESSAGING_SENDER_ID') }}",
+    appId: "{{ env('FIREBASE_APP_ID') }}",
+    measurementId: "{{ env('FIREBASE_MEASUREMENT_ID') }}"
+  };
+  if (typeof firebase !== 'undefined' && firebaseConfig.apiKey) {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    firebaseDb = firebase.database();
+    console.log("[Firebase] Initialized successfully with URL:", firebaseConfig.databaseURL);
+  }
+} catch (err) {
+  console.warn("[Firebase] Init error (running in local simulation mode):", err);
+}
+
+// 3. COLOR PALETTE DEFINITIONS & INTERPOLATORS
+function getColorForValue(val, maxVal = 350, palette = APP_STATE.currentPalette) {
+  const t = Math.max(0, Math.min(1, val / maxVal));
+  
+  if (palette === 'turbo') {
+    if (t < 0.25) {
+      const f = t / 0.25;
+      return `rgb(${Math.round(30 + 10*f)}, ${Math.round(40 + 140*f)}, ${Math.round(180 + 75*f)})`;
+    } else if (t < 0.5) {
+      const f = (t - 0.25) / 0.25;
+      return `rgb(${Math.round(40 + 160*f)}, ${Math.round(180 + 70*f)}, ${Math.round(255 - 200*f)})`;
+    } else if (t < 0.75) {
+      const f = (t - 0.5) / 0.25;
+      return `rgb(${Math.round(200 + 55*f)}, ${Math.round(250 - 80*f)}, ${Math.round(55 - 45*f)})`;
+    } else {
+      const f = (t - 0.75) / 0.25;
+      return `rgb(${Math.round(255 - 30*f)}, ${Math.round(170 - 140*f)}, ${Math.round(10 + 20*f)})`;
+    }
+  } else if (palette === 'jet') {
+    let r = Math.min(Math.max(1.5 - Math.abs(t * 4 - 3), 0), 1) * 255;
+    let g = Math.min(Math.max(1.5 - Math.abs(t * 4 - 2), 0), 1) * 255;
+    let b = Math.min(Math.max(1.5 - Math.abs(t * 4 - 1), 0), 1) * 255;
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
+  } else if (palette === 'viridis') {
+    const r = Math.round(68 + t * (253 - 68));
+    const g = Math.round(1 + Math.sin(t * Math.PI) * 200 + t * 50);
+    const b = Math.round(84 + (1 - t) * 140);
+    return `rgb(${r}, ${g}, ${b})`;
+  } else if (palette === 'magma') {
+    const r = Math.round(t < 0.3 ? t * 400 : 120 + (t - 0.3) * 190);
+    const g = Math.round(t < 0.5 ? t * 50 : 25 + (t - 0.5) * 400);
+    const b = Math.round(t < 0.4 ? 40 + t * 300 : 160 - (t - 0.4) * 250);
+    return `rgb(${Math.min(255, Math.max(0, r))}, ${Math.min(255, Math.max(0, g))}, ${Math.min(255, Math.max(0, b))})`;
+  } else {
+    // Thermal IR
+    if (t < 0.33) {
+      const f = t / 0.33;
+      return `rgb(${Math.round(20*f)}, ${Math.round(30*f)}, ${Math.round(120 + 135*f)})`;
+    } else if (t < 0.66) {
+      const f = (t - 0.33) / 0.33;
+      return `rgb(${Math.round(20 + 235*f)}, ${Math.round(30 + 100*f)}, ${Math.round(255 - 250*f)})`;
+    } else {
+      const f = (t - 0.66) / 0.34;
+      return `rgb(255, ${Math.round(130 + 125*f)}, ${Math.round(5 + 240*f)})`;
+    }
+  }
+}
+
+function updateColorbarGradient() {
+  const gradientEl = document.getElementById('colorbarGradient');
+  if (!gradientEl) return;
+  const stops = [];
+  for (let i = 0; i <= 10; i++) {
+    const pct = i * 10;
+    const col = getColorForValue(pct * 3.5, 350, APP_STATE.currentPalette);
+    stops.push(`${col} ${pct}%`);
+  }
+  gradientEl.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+}
+
+// 4. CHART.JS REAL-TIME TELEMETRY SETUP
+let telemetryChart = null;
+
+function initTelemetryChart() {
+  const ctx = document.getElementById('moduleChartCanvas').getContext('2d');
+  
+  telemetryChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'XS1 (D01-D24)',
+          borderColor: '#60A5FA',
+          backgroundColor: 'rgba(96, 165, 250, 0.1)',
+          borderWidth: 2,
+          pointRadius: 2.5,
+          data: [],
+          tension: 0.35
+        },
+        {
+          label: 'XS2 (D25-D48)',
+          borderColor: '#FBBF24',
+          backgroundColor: 'rgba(251, 191, 36, 0.15)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointBackgroundColor: '#F59E0B',
+          data: [],
+          tension: 0.35
+        },
+        {
+          label: 'XS3 (D49-D72)',
+          borderColor: '#34D399',
+          backgroundColor: 'rgba(52, 211, 153, 0.1)',
+          borderWidth: 2,
+          pointRadius: 2.5,
+          data: [],
+          tension: 0.35
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 200 },
+      scales: {
+        x: {
+          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          ticks: { color: '#64748B', font: { family: 'IBM Plex Mono', size: 9.5 } }
+        },
+        y: {
+          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          ticks: { color: '#64748B', font: { family: 'IBM Plex Mono', size: 9.5 } }
+        }
+      },
+      plugins: {
+        legend: {
+          labels: { color: '#CBD5E1', font: { family: 'IBM Plex Mono', size: 10.5 }, boxWidth: 10 }
+        }
+      }
+    }
+  });
+}
+
+// 5. HEATMAP CANVAS RENDERING ENGINE
+const canvas = document.getElementById('matrixHeatmapCanvas');
+const ctx = canvas.getContext('2d');
+let hoveredCell = null;
+
+function renderMatrixHeatmap() {
+  const width = canvas.width;
+  const height = canvas.height;
+  ctx.clearRect(0, 0, width, height);
+
+  const numCols = 72;
+  const numRows = APP_STATE.totalHeights;
+  const cellW = width / numCols;
+  const cellH = height / numRows;
+
+  ctx.fillStyle = '#040711';
+  ctx.fillRect(0, 0, width, height);
+
+  if (APP_STATE.viewMode === 'contour') {
+    renderContourView(width, height);
+    return;
+  } else if (APP_STATE.viewMode === 'grid') {
+    render8x9GridView(width, height);
+    return;
+  }
+
+  // Draw Heatmap Cells
+  for (let r = 0; r < numRows; r++) {
+    const isCompleted = r < APP_STATE.matrixData.length;
+    const rowData = isCompleted ? APP_STATE.matrixData[r] : null;
+    const isLoopSelected = APP_STATE.selectedLoops.has(r + 1);
+
+    for (let c = 0; c < numCols; c++) {
+      const x = c * cellW;
+      const y = r * cellH;
+
+      if (isCompleted && isLoopSelected && rowData) {
+        const cps = rowData[c];
+        ctx.fillStyle = getColorForValue(cps, 350);
+        ctx.fillRect(x, y, cellW, cellH);
+
+        if (cps >= APP_STATE.hotspotThreshold) {
+          ctx.strokeStyle = '#F43F5E';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
+        } else {
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+          ctx.lineWidth = 0.5;
+          ctx.strokeRect(x, y, cellW, cellH);
+        }
+      } else {
+        ctx.fillStyle = (r % 2 === c % 2) ? '#0A0F1D' : '#070B16';
+        ctx.fillRect(x, y, cellW, cellH);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+        ctx.lineWidth = 0.5;
+        ctx.strokeRect(x, y, cellW, cellH);
+      }
+    }
+
+    ctx.fillStyle = isCompleted ? '#94A3B8' : '#334155';
+    ctx.font = '600 9px "IBM Plex Mono"';
+    ctx.fillText(`L${r + 1 < 10 ? '0' + (r + 1) : r + 1}`, 6, r * cellH + cellH / 2 + 3);
+  }
+
+  // Vertical Module Boundaries
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.lineWidth = 1.5;
+  
+  const xDivider1 = 24 * cellW;
+  ctx.beginPath();
+  ctx.moveTo(xDivider1, 0);
+  ctx.lineTo(xDivider1, height);
+  ctx.stroke();
+
+  const xDivider2 = 48 * cellW;
+  ctx.beginPath();
+  ctx.moveTo(xDivider2, 0);
+  ctx.lineTo(xDivider2, height);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Hover Crosshairs
+  if (hoveredCell && hoveredCell.row < numRows && hoveredCell.col < numCols) {
+    const hx = hoveredCell.col * cellW;
+    const hy = hoveredCell.row * cellH;
+
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(hx - 0.5, hy - 0.5, cellW + 1, cellH + 1);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.setLineDash([2, 2]);
+    ctx.beginPath();
+    ctx.moveTo(0, hy + cellH / 2);
+    ctx.lineTo(width, hy + cellH / 2);
+    ctx.moveTo(hx + cellW / 2, 0);
+    ctx.lineTo(hx + cellW / 2, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+}
+
+// 6. CONTINUOUS CONTOUR VIEW
+function renderContourView(width, height) {
+  ctx.fillStyle = '#040711';
+  ctx.fillRect(0, 0, width, height);
+
+  if (APP_STATE.matrixData.length === 0) {
+    ctx.fillStyle = '#64748B';
+    ctx.font = '13px "IBM Plex Mono"';
+    ctx.textAlign = 'center';
+    ctx.fillText("No scan matrix data acquired yet. Press [START SCAN] to begin.", width / 2, height / 2);
+    ctx.textAlign = 'left';
+    return;
+  }
+
+  const imgData = ctx.createImageData(width, height);
+  const data = imgData.data;
+  const numRows = APP_STATE.matrixData.length;
+  const numCols = 72;
+
+  for (let py = 0; py < height; py += 2) {
+    const normY = py / height;
+    const rowFloat = normY * (numRows - 1);
+    const r0 = Math.floor(rowFloat);
+    const r1 = Math.min(numRows - 1, r0 + 1);
+    const ryRatio = rowFloat - r0;
+
+    for (let px = 0; px < width; px += 2) {
+      const normX = px / width;
+      const colFloat = normX * (numCols - 1);
+      const c0 = Math.floor(colFloat);
+      const c1 = Math.min(numCols - 1, c0 + 1);
+      const rxRatio = colFloat - c0;
+
+      const v00 = APP_STATE.matrixData[r0][c0] || 25;
+      const v10 = APP_STATE.matrixData[r0][c1] || 25;
+      const v01 = APP_STATE.matrixData[r1][c0] || 25;
+      const v11 = APP_STATE.matrixData[r1][c1] || 25;
+
+      const topVal = v00 * (1 - rxRatio) + v10 * rxRatio;
+      const botVal = v01 * (1 - rxRatio) + v11 * rxRatio;
+      const val = topVal * (1 - ryRatio) + botVal * ryRatio;
+
+      const rgbStr = getColorForValue(val, 350);
+      const match = rgbStr.match(/\d+/g);
+      const r = parseInt(match[0]);
+      const g = parseInt(match[1]);
+      const b = parseInt(match[2]);
+
+      for (let dy = 0; dy < 2 && (py + dy) < height; dy++) {
+        for (let dx = 0; dx < 2 && (px + dx) < width; dx++) {
+          const idx = ((py + dy) * width + (px + dx)) * 4;
+          data[idx] = r;
+          data[idx + 1] = g;
+          data[idx + 2] = b;
+          data[idx + 3] = 255;
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(imgData, 0, 0);
+
+  const cx = (APP_STATE.estimatedSource.x / 800) * width;
+  const cy = ((350 - APP_STATE.estimatedSource.z) / 350) * height;
+
+  ctx.fillStyle = '#EF4444';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
+// 7. 8x9 CELL MATRIX VIEW
+function render8x9GridView(width, height) {
+  const rows = 8;
+  const cols = 9;
+  const cellW = width / cols;
+  const cellH = height / rows;
+
+  ctx.fillStyle = '#040711';
+  ctx.fillRect(0, 0, width, height);
+
+  const detectorAverages = new Array(72).fill(0);
+  if (APP_STATE.matrixData.length > 0) {
+    for (let r = 0; r < APP_STATE.matrixData.length; r++) {
+      for (let c = 0; c < 72; c++) {
+        detectorAverages[c] += APP_STATE.matrixData[r][c];
+      }
+    }
+    for (let c = 0; c < 72; c++) {
+      detectorAverages[c] = Math.round(detectorAverages[c] / APP_STATE.matrixData.length);
+    }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const detIndex = r * cols + c;
+      const x = c * cellW;
+      const y = r * cellH;
+      const avgVal = detectorAverages[detIndex] || 0;
+
+      ctx.fillStyle = getColorForValue(avgVal, 350);
+      ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+
+      ctx.fillStyle = avgVal > 150 ? '#000000' : '#FFFFFF';
+      ctx.font = 'bold 11px "IBM Plex Mono"';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${avgVal.toFixed(0)}`, x + cellW / 2, y + cellH / 2 + 4);
+      
+      ctx.fillStyle = avgVal > 150 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.4)';
+      ctx.font = '8px "IBM Plex Mono"';
+      ctx.fillText(`D${detIndex + 1}`, x + 16, y + 12);
+    }
+  }
+  ctx.textAlign = 'left';
+}
+
+// 8. 3D ISOMETRIC SOURCE LOCALIZATION
+function render3DSourceViewport() {
+  const canvas3D = document.getElementById('canvas3D');
+  if (!canvas3D) return;
+  const ctx3D = canvas3D.getContext('2d');
+  const w = canvas3D.width;
+  const h = canvas3D.height;
+
+  ctx3D.clearRect(0, 0, w, h);
+  ctx3D.fillStyle = '#03060E';
+  ctx3D.fillRect(0, 0, w, h);
+
+  const originX = w * 0.28;
+  const originY = h * 0.72;
+  const scale = 0.26;
+
+  function project3D(x, y, z) {
+    const isoX = originX + (x * 0.7 - y * 0.7) * scale;
+    const isoY = originY + (x * 0.2 + y * 0.2 - z * 0.8) * scale;
+    return { px: isoX, py: isoY };
+  }
+
+  // 3D Bounding Cube Wireframe
+  ctx3D.strokeStyle = 'rgba(59, 130, 246, 0.25)';
+  ctx3D.lineWidth = 1;
+
+  const corners = [
+    project3D(0, -100, 0), project3D(800, -100, 0), project3D(800, 100, 0), project3D(0, 100, 0),
+    project3D(0, -100, 400), project3D(800, -100, 400), project3D(800, 100, 400), project3D(0, 100, 400)
+  ];
+
+  ctx3D.beginPath();
+  ctx3D.moveTo(corners[0].px, corners[0].py);
+  ctx3D.lineTo(corners[1].px, corners[1].py);
+  ctx3D.lineTo(corners[2].px, corners[2].py);
+  ctx3D.lineTo(corners[3].px, corners[3].py);
+  ctx3D.closePath();
+  ctx3D.stroke();
+
+  for (let i = 0; i < 4; i++) {
+    ctx3D.beginPath();
+    ctx3D.moveTo(corners[i].px, corners[i].py);
+    ctx3D.lineTo(corners[i + 4].px, corners[i + 4].py);
+    ctx3D.stroke();
+  }
+
+  ctx3D.beginPath();
+  ctx3D.moveTo(corners[4].px, corners[4].py);
+  ctx3D.lineTo(corners[5].px, corners[5].py);
+  ctx3D.lineTo(corners[6].px, corners[6].py);
+  ctx3D.lineTo(corners[7].px, corners[7].py);
+  ctx3D.closePath();
+  ctx3D.stroke();
+
+  ctx3D.fillStyle = '#64748B';
+  ctx3D.font = '9px "IBM Plex Mono"';
+  const pXLabel = project3D(820, 0, 0);
+  ctx3D.fillText("X: 800cm", pXLabel.px, pXLabel.py);
+  const pZLabel = project3D(0, 0, 420);
+  ctx3D.fillText("Z: 400cm", pZLabel.px, pZLabel.py);
+
+  // Active Linear Array Bar
+  const dStart = project3D(0, 0, APP_STATE.currentHeight * 35);
+  const dEnd = project3D(800, 0, APP_STATE.currentHeight * 35);
+  ctx3D.strokeStyle = '#34D399';
+  ctx3D.lineWidth = 2.5;
+  ctx3D.beginPath();
+  ctx3D.moveTo(dStart.px, dStart.py);
+  ctx3D.lineTo(dEnd.px, dEnd.py);
+  ctx3D.stroke();
+
+  // Estimated Source Sphere
+  const src = APP_STATE.estimatedSource;
+  const pSrc = project3D(src.x, src.y, src.z);
+  const pBase = project3D(src.x, src.y, 0);
+
+  ctx3D.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+  ctx3D.setLineDash([2, 2]);
+  ctx3D.beginPath();
+  ctx3D.moveTo(pSrc.px, pSrc.py);
+  ctx3D.lineTo(pBase.px, pBase.py);
+  ctx3D.stroke();
+  ctx3D.setLineDash([]);
+
+  ctx3D.fillStyle = 'rgba(239, 68, 68, 0.2)';
+  ctx3D.beginPath();
+  ctx3D.ellipse(pBase.px, pBase.py, 10, 4, 0, 0, Math.PI * 2);
+  ctx3D.fill();
+
+  const radialGlow = ctx3D.createRadialGradient(pSrc.px, pSrc.py, 2, pSrc.px, pSrc.py, 16);
+  radialGlow.addColorStop(0, '#EF4444');
+  radialGlow.addColorStop(0.5, 'rgba(239, 68, 68, 0.4)');
+  radialGlow.addColorStop(1, 'rgba(239, 68, 68, 0)');
+  ctx3D.fillStyle = radialGlow;
+  ctx3D.beginPath();
+  ctx3D.arc(pSrc.px, pSrc.py, 16, 0, Math.PI * 2);
+  ctx3D.fill();
+
+  ctx3D.fillStyle = '#EF4444';
+  ctx3D.beginPath();
+  ctx3D.arc(pSrc.px, pSrc.py, 5.5, 0, Math.PI * 2);
+  ctx3D.fill();
+  ctx3D.strokeStyle = '#FFFFFF';
+  ctx3D.lineWidth = 1.5;
+  ctx3D.stroke();
+}
+
+// 9. TOP VIEW X-Z CROSSHAIR RENDERER
+function renderTopViewXZ() {
+  const canvasTop = document.getElementById('canvasTopViewXZ');
+  if (!canvasTop) return;
+  const ctxTop = canvasTop.getContext('2d');
+  const w = canvasTop.width;
+  const h = canvasTop.height;
+
+  ctxTop.clearRect(0, 0, w, h);
+  ctxTop.fillStyle = '#03060E';
+  ctxTop.fillRect(0, 0, w, h);
+
+  ctxTop.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctxTop.lineWidth = 1;
+  for (let x = 0; x < w; x += 40) {
+    ctxTop.beginPath();
+    ctxTop.moveTo(x, 0);
+    ctxTop.lineTo(x, h);
+    ctxTop.stroke();
+  }
+  for (let y = 0; y < h; y += 30) {
+    ctxTop.beginPath();
+    ctxTop.moveTo(0, y);
+    ctxTop.lineTo(w, y);
+    ctxTop.stroke();
+  }
+
+  const padding = 18;
+  const plotW = w - padding * 2;
+  const plotH = h - padding * 2;
+
+  ctxTop.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+  ctxTop.strokeRect(padding, padding, plotW, plotH);
+
+  const srcX = padding + (APP_STATE.estimatedSource.x / 800) * plotW;
+  const srcZ = padding + ((350 - APP_STATE.estimatedSource.z) / 350) * plotH;
+
+  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+  ctxTop.setLineDash([3, 3]);
+  ctxTop.beginPath();
+  ctxTop.moveTo(padding, srcZ);
+  ctxTop.lineTo(w - padding, srcZ);
+  ctxTop.moveTo(srcX, padding);
+  ctxTop.lineTo(srcX, h - padding);
+  ctxTop.stroke();
+  ctxTop.setLineDash([]);
+
+  ctxTop.fillStyle = '#EF4444';
+  ctxTop.beginPath();
+  ctxTop.arc(srcX, srcZ, 5.5, 0, Math.PI * 2);
+  ctxTop.fill();
+  ctxTop.strokeStyle = '#FFF';
+  ctxTop.lineWidth = 1.5;
+  ctxTop.stroke();
+}
+
+// 10. TOOLTIP & MOUSE INTERACTION
+canvas.addEventListener('mousemove', (e) => {
+  if (APP_STATE.viewMode !== 'matrix') return;
+
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  const mouseX = (e.clientX - rect.left) * scaleX;
+  const mouseY = (e.clientY - rect.top) * scaleY;
+
+  const col = Math.floor(mouseX / (canvas.width / 72));
+  const row = Math.floor(mouseY / (canvas.height / APP_STATE.totalHeights));
+
+  if (col >= 0 && col < 72 && row >= 0 && row < APP_STATE.totalHeights) {
+    hoveredCell = { row, col };
+    renderMatrixHeatmap();
+
+    const tooltip = document.getElementById('matrixTooltip');
+    const detNumber = col + 1;
+    let modName = "XS1 (0x01)";
+    if (col >= 24 && col < 48) modName = "XS2 (0x02)";
+    if (col >= 48) modName = "XS3 (0x03)";
+
+    const isAvailable = row < APP_STATE.matrixData.length;
+    const cpsVal = isAvailable ? APP_STATE.matrixData[row][col] : '--';
+    const doseRate = isAvailable ? (cpsVal * 0.012).toFixed(2) : '--';
+    const isHotspot = isAvailable && cpsVal >= APP_STATE.hotspotThreshold;
+
+    document.getElementById('ttDetectorName').textContent = `Detector D${detNumber}`;
+    document.getElementById('ttModuleTag').textContent = modName;
+    document.getElementById('ttHeightLevel').textContent = `Loop ${row + 1} (${(row + 1) * 35} cm)`;
+    document.getElementById('ttCoordinates').textContent = `${Math.round((col / 72) * 800)}cm, ${(row + 1) * 35}cm`;
+    document.getElementById('ttCpsValue').textContent = isAvailable ? `${cpsVal} CPS` : 'No Data';
+    document.getElementById('ttDoseRate').textContent = isAvailable ? `${doseRate} µSv/h` : '--';
+    
+    const ttStatus = document.getElementById('ttStatus');
+    if (isHotspot) {
+      ttStatus.textContent = 'HOTSPOT ALERT';
+      ttStatus.className = 'tt-val hotspot';
+    } else {
+      ttStatus.textContent = 'NORMAL BG';
+      ttStatus.className = 'tt-val';
+      ttStatus.style.color = '#34D399';
+    }
+
+    tooltip.style.display = 'block';
+    tooltip.style.left = `${e.clientX - rect.left}px`;
+    tooltip.style.top = `${e.clientY - rect.top}px`;
+  }
+});
+
+canvas.addEventListener('mouseleave', () => {
+  hoveredCell = null;
+  document.getElementById('matrixTooltip').style.display = 'none';
+  renderMatrixHeatmap();
+});
+
+// 11. INDIVIDUAL 72-CHANNEL READOUTS & MICRO STRIP
+function buildIndividualChannelsGrid() {
+  const container = document.getElementById('individualChannelsContainer');
+  if (!container) return;
+  container.innerHTML = '';
+
+  for (let i = 1; i <= 72; i++) {
+    const chip = document.createElement('div');
+    let modClass = 'xs1';
+    if (i > 24 && i <= 48) modClass = 'xs2';
+    if (i > 48) modClass = 'xs3';
+
+    chip.className = `channel-readout-chip ${modClass}`;
+    chip.id = `channelChip-${i}`;
+    chip.innerHTML = `
+      <span class="c-name">D${i < 10 ? '0' + i : i}</span>
+      <span class="c-val" id="chipVal-${i}">--</span>
+    `;
+    container.appendChild(chip);
+  }
+}
+
+function buildDetectorDotsGrid() {
+  const grid = document.getElementById('detectorDotsGrid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  for (let i = 1; i <= 72; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'det-dot';
+    dot.id = `detDot-${i}`;
+    dot.title = `D${i} (XS${i <= 24 ? 1 : (i <= 48 ? 2 : 3)})`;
+    grid.appendChild(dot);
+  }
+}
+
+function updateIndividualChannelsVisual(full72) {
+  if (!full72 || full72.length < 72) return;
+
+  let xs1Sum = 0, xs2Sum = 0, xs3Sum = 0;
+
+  for (let i = 0; i < 72; i++) {
+    const cps = full72[i];
+    const detNum = i + 1;
+    
+    // Update numerical value chip
+    const valEl = document.getElementById(`chipVal-${detNum}`);
+    const chipEl = document.getElementById(`channelChip-${detNum}`);
+    if (valEl) valEl.textContent = `${cps}`;
+    if (chipEl) {
+      if (cps >= APP_STATE.hotspotThreshold) chipEl.classList.add('hotspot');
+      else chipEl.classList.remove('hotspot');
+    }
+
+    // Update micro activity dot
+    const dot = document.getElementById(`detDot-${detNum}`);
+    if (dot) {
+      dot.style.backgroundColor = getColorForValue(cps, 350);
+      if (cps >= APP_STATE.hotspotThreshold) {
+        dot.style.boxShadow = '0 0 6px #F43F5E';
+      } else {
+        dot.style.boxShadow = 'none';
+      }
+    }
+
+    if (i < 24) xs1Sum += cps;
+    else if (i < 48) xs2Sum += cps;
+    else xs3Sum += cps;
+  }
+
+  document.getElementById('modAvgXS1').textContent = `${Math.round(xs1Sum / 24)} CPS`;
+  document.getElementById('modAvgXS2').textContent = `${Math.round(xs2Sum / 24)} CPS`;
+  document.getElementById('modAvgXS3').textContent = `${Math.round(xs3Sum / 24)} CPS`;
+}
+
+// 12. SCANNING ENGINE & LIVE DATA GENERATION
+function generateDummyModuleData(moduleId, isHotspot) {
+  const data = [];
+  for (let ch = 0; ch < 24; ch++) {
+    let base = Math.floor(Math.random() * 25) + 18;
+    if (isHotspot && moduleId === 2) {
+      const dist = Math.abs(ch - 14); // peak at XS2 ch 14 (D38)
+      if (dist <= 5) {
+        const boost = Math.floor((Math.random() * 140 + 160) * Math.max(0.2, (1 - dist / 6)));
+        base += boost;
+      } else {
+        base += Math.floor(Math.random() * 35) + 20;
+      }
+    } else if (isHotspot && (moduleId === 1 && ch > 18 || moduleId === 3 && ch < 6)) {
+      base += Math.floor(Math.random() * 30) + 10;
+    }
+    data.push(base);
+  }
+  return data;
+}
+
+function startScanning() {
+  if (APP_STATE.isScanning && !APP_STATE.isPaused) return;
+
+  if (APP_STATE.isPaused) {
+    APP_STATE.isPaused = false;
+    document.getElementById('btnPauseScan').classList.remove('btn-start');
+    document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
+    logTerminal('<span class="log-badge-ok">[RESUMED]</span> Scanning sequence continued.');
+  } else {
+    APP_STATE.isScanning = true;
+    APP_STATE.currentHeight = 0;
+    APP_STATE.matrixData = [];
+    APP_STATE.xs1History = [];
+    APP_STATE.xs2History = [];
+    APP_STATE.xs3History = [];
+    APP_STATE.timestamps = [];
+    APP_STATE.elapsedSeconds = 0;
+
+    document.getElementById('btnStartScan').disabled = true;
+    document.getElementById('btnPauseScan').disabled = false;
+    document.getElementById('btnStopScan').disabled = false;
+
+    logTerminal('<span class="log-badge-ok">[SCAN]</span> 72-Ch Matrix acquisition started.');
+  }
+
+  // Start Elapsed Timer
+  clearInterval(APP_STATE.timerIntervalId);
+  APP_STATE.timerIntervalId = setInterval(() => {
+    if (!APP_STATE.isPaused) {
+      APP_STATE.elapsedSeconds++;
+      const mins = String(Math.floor(APP_STATE.elapsedSeconds / 60)).padStart(2, '0');
+      const secs = String(APP_STATE.elapsedSeconds % 60).padStart(2, '0');
+      document.getElementById('metricElapsedTimer').textContent = `Elapsed: ${mins}:${secs}`;
+    }
+  }, 1000);
+
+  // Scanning Interval Cycle
+  clearInterval(APP_STATE.scanIntervalId);
+  APP_STATE.scanIntervalId = setInterval(executeScanCycle, APP_STATE.samplingIntervalMs);
+}
+
+function executeScanCycle() {
+  if (APP_STATE.isPaused) return;
+
+  APP_STATE.currentHeight++;
+  const h = APP_STATE.currentHeight;
+
+  if (h > APP_STATE.totalHeights) {
+    stopScanning(true);
+    return;
+  }
+
+  const hasAnomaly = (h === 4 || h === 5 || h === 6);
+  const d1 = generateDummyModuleData(1, hasAnomaly);
+  const d2 = generateDummyModuleData(2, hasAnomaly);
+  const d3 = generateDummyModuleData(3, hasAnomaly);
+  const full72 = [...d1, ...d2, ...d3];
+
+  APP_STATE.matrixData.push(full72);
+
+  // Compute Averages
+  const avg1 = d1.reduce((a, b) => a + b, 0) / 24;
+  const avg2 = d2.reduce((a, b) => a + b, 0) / 24;
+  const avg3 = d3.reduce((a, b) => a + b, 0) / 24;
+  const maxCps = Math.max(...full72);
+  const maxChannelIndex = full72.indexOf(maxCps) + 1;
+  const totalCps = full72.reduce((a, b) => a + b, 0);
+  const globalAvg = (totalCps / 72).toFixed(1);
+
+  // Update UI Stats
+  document.getElementById('headerHeightProgress').textContent = `${h} / ${APP_STATE.totalHeights}`;
+  document.getElementById('metricActiveLoop').innerHTML = `${h} <span class="kpi-unit">/ ${APP_STATE.totalHeights}</span>`;
+  document.getElementById('metricMaxCps').innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
+  document.getElementById('metricMaxChannel').textContent = `Detector D${maxChannelIndex} (XS${maxChannelIndex <= 24 ? 1 : (maxChannelIndex <= 48 ? 2 : 3)})`;
+  document.getElementById('metricAvgCps').innerHTML = `${globalAvg} <span class="kpi-unit">cps</span>`;
+  document.getElementById('metricTotalCounts').innerHTML = `${totalCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
+
+  // Update Estimated Source Coordinates
+  if (hasAnomaly || maxCps > 100) {
+    APP_STATE.estimatedSource = {
+      x: 416.4 + (Math.random() * 4 - 2),
+      y: -32.4 + (Math.random() * 2 - 1),
+      z: (h * 35) + (Math.random() * 4 - 2),
+      confidence: Math.min(98.8, 85.0 + (maxCps / 350) * 13).toFixed(1)
+    };
+    document.getElementById('statPosX').textContent = `${APP_STATE.estimatedSource.x.toFixed(1)} cm`;
+    document.getElementById('statPosY').textContent = `${APP_STATE.estimatedSource.y.toFixed(1)} cm`;
+    document.getElementById('statPosZ').textContent = `${APP_STATE.estimatedSource.z.toFixed(1)} cm`;
+    document.getElementById('statConfidence').textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
+    document.getElementById('statConfidenceVal').textContent = `${APP_STATE.estimatedSource.confidence}%`;
+    document.getElementById('statHotspotCount').textContent = `XS2 (D${maxChannelIndex})`;
+  }
+
+  // Update Real-time Chart
+  const timeLabel = new Date().toLocaleTimeString();
+  telemetryChart.data.labels.push(timeLabel);
+  telemetryChart.data.datasets[0].data.push(avg1);
+  telemetryChart.data.datasets[1].data.push(avg2);
+  telemetryChart.data.datasets[2].data.push(avg3);
+
+  if (telemetryChart.data.labels.length > 20) {
+    telemetryChart.data.labels.shift();
+    telemetryChart.data.datasets.forEach(ds => ds.data.shift());
+  }
+  telemetryChart.update();
+
+  // Update individual 72 channels & micro strip
+  updateIndividualChannelsVisual(full72);
+
+  // Log to Terminal Screen
+  const statusTag = maxCps >= APP_STATE.hotspotThreshold ? '<span class="log-badge-alert">[HOTSPOT]</span>' : '<span class="log-badge-ok">[NORMAL]</span>';
+  logTerminal(`[L:${h}/${APP_STATE.totalHeights}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
+
+  // Push to Firebase RTDB if active
+  if (APP_STATE.useFirebase && firebaseDb) {
+    pushToFirebase(h, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
+  }
+
+  // Highlight Sidebar Loop item
+  const loopItem = document.getElementById(`loopItem-${h}`);
+  if (loopItem) {
+    loopItem.classList.add('active');
+    if (hasAnomaly) loopItem.classList.add('has-hotspot');
+  }
+
+  // Re-render Views
+  renderMatrixHeatmap();
+  render3DSourceViewport();
+  renderTopViewXZ();
+  updateRawTable();
+}
+
+function pauseScanning() {
+  if (!APP_STATE.isScanning) return;
+  APP_STATE.isPaused = !APP_STATE.isPaused;
+
+  const btn = document.getElementById('btnPauseScan');
+  const label = document.getElementById('pauseBtnLabel');
+
+  if (APP_STATE.isPaused) {
+    label.textContent = 'RESUME';
+    btn.classList.add('btn-start');
+    logTerminal('<span class="log-badge-warn">[PAUSED]</span> Acquisition suspended.');
+  } else {
+    label.textContent = 'PAUSE';
+    btn.classList.remove('btn-start');
+    logTerminal('<span class="log-badge-ok">[RESUMED]</span> Acquisition active.');
+  }
+}
+
+function stopScanning(isCompleted = false) {
+  clearInterval(APP_STATE.scanIntervalId);
+  clearInterval(APP_STATE.timerIntervalId);
+  APP_STATE.isScanning = false;
+  APP_STATE.isPaused = false;
+
+  document.getElementById('btnStartScan').disabled = false;
+  document.getElementById('btnPauseScan').disabled = true;
+  document.getElementById('btnStopScan').disabled = true;
+  document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
+  document.getElementById('btnPauseScan').classList.remove('btn-start');
+
+  if (isCompleted) {
+    logTerminal('<span class="log-badge-ok">[COMPLETE]</span> Full scan matrix acquired.');
+  } else {
+    logTerminal('<span class="log-badge-warn">[RESET]</span> Scanner state cleared.');
+  }
+}
+
+// 13. FIREBASE REALTIME PUSH & SYNC
+function pushToFirebase(height, fullArray, d1, d2, d3, maxCps, maxCh, avgCps) {
+  const timestamp = new Date().toISOString();
+  const startTime = Date.now();
+
+  try {
+    firebaseDb.ref('radiation_scans/latest').set({
+      timestamp: timestamp,
+      current_height: height,
+      total_height: APP_STATE.totalHeights,
+      xs1_data: d1,
+      xs2_data: d2,
+      xs3_data: d3,
+      full_72_array: fullArray,
+      max_cps: maxCps,
+      max_channel: `D${maxCh}`,
+      avg_cps: parseFloat(avgCps),
+      estimated_source_3d: APP_STATE.estimatedSource,
+      status: maxCps >= APP_STATE.hotspotThreshold ? 'alert' : 'safe'
+    }).then(() => {
+      const latency = Date.now() - startTime;
+      document.getElementById('syncLatencyText').textContent = `${latency}ms`;
+    });
+  } catch (e) {
+    console.warn("[Firebase Push Error]", e);
+  }
+}
+
+function toggleFirebaseSync() {
+  APP_STATE.useFirebase = !APP_STATE.useFirebase;
+  const toggleEl = document.getElementById('fbSyncToggle');
+  if (APP_STATE.useFirebase) {
+    toggleEl.classList.add('active');
+    logTerminal('<span class="log-badge-ok">[FIREBASE]</span> Realtime Cloud Sync On.');
+  } else {
+    toggleEl.classList.remove('active');
+    logTerminal('<span class="log-badge-warn">[FIREBASE]</span> Offline Mode (Local).');
+  }
+}
+
+// 14. SIDEBAR LOOPS & PARAMETER CONTROLS
+function buildSidebarLoopList() {
+  const container = document.getElementById('loopListContainer');
+  container.innerHTML = '';
+  APP_STATE.selectedLoops.clear();
+
+  for (let i = 1; i <= APP_STATE.totalHeights; i++) {
+    APP_STATE.selectedLoops.add(i);
+    const item = document.createElement('div');
+    item.className = 'loop-row';
+    item.id = `loopItem-${i}`;
+    item.innerHTML = `
+      <div class="loop-left">
+        <input type="checkbox" class="loop-checkbox" checked onchange="toggleLoopSelection(${i}, this.checked)">
+        <span class="loop-name">Loop ${i < 10 ? '0' + i : i}</span>
+      </div>
+      <span class="loop-height-tag">${i * 35} cm</span>
+    `;
+    container.appendChild(item);
+  }
+  document.getElementById('sidebarLoopCountText').textContent = `${APP_STATE.totalHeights} Loops`;
+}
+
+function toggleLoopSelection(loopNum, isChecked) {
+  if (isChecked) {
+    APP_STATE.selectedLoops.add(loopNum);
+  } else {
+    APP_STATE.selectedLoops.delete(loopNum);
+  }
+  renderMatrixHeatmap();
+}
+
+function selectAllLoops(shouldSelect) {
+  const checkboxes = document.querySelectorAll('#loopListContainer input[type="checkbox"]');
+  checkboxes.forEach((cb, idx) => {
+    cb.checked = shouldSelect;
+    if (shouldSelect) APP_STATE.selectedLoops.add(idx + 1);
+    else APP_STATE.selectedLoops.delete(idx + 1);
+  });
+  renderMatrixHeatmap();
+}
+
+function updateTotalHeights(val) {
+  APP_STATE.totalHeights = parseInt(val) || 10;
+  buildSidebarLoopList();
+  document.getElementById('headerHeightProgress').textContent = `0 / ${APP_STATE.totalHeights}`;
+  renderMatrixHeatmap();
+}
+
+function updateSamplingInterval(val) {
+  APP_STATE.samplingIntervalMs = parseInt(val) || 1000;
+  const hz = (1000 / APP_STATE.samplingIntervalMs).toFixed(1);
+  document.getElementById('liveStatusText').textContent = `${hz} Hz`;
+}
+
+function updateThreshold(val) {
+  APP_STATE.hotspotThreshold = parseInt(val) || 100;
+  renderMatrixHeatmap();
+}
+
+function changeColorPalette(palette) {
+  APP_STATE.currentPalette = palette;
+  updateColorbarGradient();
+  renderMatrixHeatmap();
+}
+
+function switchViewMode(mode) {
+  APP_STATE.viewMode = mode;
+  document.querySelectorAll('.tab-pill-btn').forEach(btn => btn.classList.remove('active'));
+
+  if (mode === 'matrix') document.getElementById('tabBtnMatrix').classList.add('active');
+  if (mode === 'contour') document.getElementById('tabBtnContour').classList.add('active');
+  if (mode === 'grid') document.getElementById('tabBtnGrid').classList.add('active');
+  if (mode === 'table') document.getElementById('tabBtnRawTable').classList.add('active');
+
+  const canvasStage = document.getElementById('canvasContainer');
+  const tableStage = document.getElementById('matrixTableView');
+
+  if (mode === 'table') {
+    canvasStage.style.display = 'none';
+    tableStage.style.display = 'block';
+    updateRawTable();
+  } else {
+    canvasStage.style.display = 'block';
+    tableStage.style.display = 'none';
+    renderMatrixHeatmap();
+  }
+}
+
+// 15. RAW MATRIX TABLE & EXPORTS
+function updateRawTable() {
+  const headerRow = document.getElementById('tableHeaderRow');
+  const tbody = document.getElementById('tableBodyRows');
+
+  if (headerRow.children.length === 0) {
+    let thHtml = '<th>Height</th>';
+    for (let c = 1; c <= 72; c++) {
+      thHtml += `<th>D${c < 10 ? '0' + c : c}</th>`;
+    }
+    headerRow.innerHTML = thHtml;
+  }
+
+  tbody.innerHTML = '';
+  APP_STATE.matrixData.forEach((row, hIdx) => {
+    let tr = `<tr><td><strong style="color:#60A5FA;">L${hIdx + 1}</strong></td>`;
+    row.forEach(cps => {
+      const cls = cps >= APP_STATE.hotspotThreshold ? 'class="cell-hotspot"' : '';
+      tr += `<td ${cls}>${cps}</td>`;
+    });
+    tr += '</tr>';
+    tbody.innerHTML += tr;
+  });
+}
+
+function exportMatrixCsv() {
+  if (APP_STATE.matrixData.length === 0) {
+    alert("No matrix scan data available yet. Please start a scan first!");
+    return;
+  }
+
+  let csvContent = "data:text/csv;charset=utf-8,Height";
+  for (let i = 1; i <= 72; i++) {
+    csvContent += `,Det_${i < 10 ? '0' + i : i}`;
+  }
+  csvContent += "\n";
+
+  APP_STATE.matrixData.forEach((row, idx) => {
+    csvContent += `Tinggi_${idx + 1},` + row.join(",") + "\n";
+  });
+
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `heatmap_radiation_matrix_${Date.now()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  logTerminal('<span class="log-badge-ok">[EXPORT]</span> CSV file saved.');
+}
+
+function exportMatrixDat() {
+  if (APP_STATE.matrixData.length === 0) {
+    alert("No matrix scan data available yet. Please start a scan first!");
+    return;
+  }
+
+  let datContent = "Height " + Array.from({length: 72}, (_, i) => `Det_${i+1}`).join(" ") + "\n";
+  APP_STATE.matrixData.forEach((row, idx) => {
+    datContent += `Tinggi_${idx + 1} ` + row.join(" ") + "\n";
+  });
+
+  const blob = new Blob([datContent], { type: 'text/plain' });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `heatmap_radiation_matrix_${Date.now()}.dat`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  logTerminal('<span class="log-badge-ok">[EXPORT]</span> .DAT file exported.');
+}
+
+// 16. TERMINAL SCREEN LOGGER
+function logTerminal(htmlMessage) {
+  const terminal = document.getElementById('terminalScreen');
+  if (!terminal) return;
+  const timeStr = new Date().toLocaleTimeString();
+  const line = document.createElement('div');
+  line.className = 'log-entry';
+  line.innerHTML = `<span class="log-t">[${timeStr}]</span> ${htmlMessage}`;
+  terminal.appendChild(line);
+  terminal.scrollTop = terminal.scrollHeight;
+}
+
+// 17. INITIALIZATION ON PAGE LOAD
+document.addEventListener('DOMContentLoaded', () => {
+  buildSidebarLoopList();
+  buildIndividualChannelsGrid();
+  buildDetectorDotsGrid();
+  updateColorbarGradient();
+  initTelemetryChart();
+  renderMatrixHeatmap();
+  render3DSourceViewport();
+  renderTopViewXZ();
+
+  // Listen to remote Firebase updates
+  if (firebaseDb) {
+    firebaseDb.ref('radiation_scans/latest').on('value', (snapshot) => {
+      const val = snapshot.val();
+      if (val && val.full_72_array) {
+        if (!APP_STATE.isScanning) {
+          logTerminal(`<span class="log-badge-ok">[FIREBASE]</span> Remote Height ${val.current_height} (Peak: ${val.max_cps} CPS)`);
+          APP_STATE.currentHeight = val.current_height;
+          if (val.estimated_source_3d) APP_STATE.estimatedSource = val.estimated_source_3d;
+          updateIndividualChannelsVisual(val.full_72_array);
+        }
+      }
+    });
+
+    firebaseDb.ref('radiation_scans/matrix_data').on('value', (snapshot) => {
+      const val = snapshot.val();
+      if (val && val.matrix && !APP_STATE.isScanning) {
+        APP_STATE.matrixData = val.matrix;
+        renderMatrixHeatmap();
+        render3DSourceViewport();
+        renderTopViewXZ();
+        updateRawTable();
+      }
+    });
+  }
+});
+</script>
+@endsection

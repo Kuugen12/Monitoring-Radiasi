@@ -3,65 +3,75 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\DetectorReading;
 
 class DashboardController extends Controller
 {
-    private function getZones()
+    /**
+     * Get list of detectors.
+     */
+    private function getDetectors()
     {
-        if (!session()->has('zones')) {
-            session()->put('zones', [
-                [ 'name' => "Zona A — Gudang", 'icon' => "box", 'rate' => 142, 'doseRate' => 0.18, 'total' => 4.82, 'status' => "safe" ],
-                [ 'name' => "Zona B — R. Kontrol", 'icon' => "server", 'rate' => 305, 'doseRate' => 0.41, 'total' => 9.94, 'status' => "warn" ],
-                [ 'name' => "Zona C — Laboratorium", 'icon' => "drop", 'rate' => 88, 'doseRate' => 0.12, 'total' => 3.05, 'status' => "safe" ],
-            ]);
-        }
-        return session()->get('zones');
+        return [
+            'detektor1' => [ 'name' => "Detektor 1 — Zona A (Gudang)", 'icon' => "box", 'key' => "detektor1" ],
+            'detektor2' => [ 'name' => "Detektor 2 — Zona B (R. Kontrol)", 'icon' => "server", 'key' => "detektor2" ],
+            'detektor3' => [ 'name' => "Detektor 3 — Zona C (Laboratorium)", 'icon' => "drop", 'key' => "detektor3" ],
+            'detektor4' => [ 'name' => "Detektor 4 — Zona D (R. Arsip)", 'icon' => "server", 'key' => "detektor4" ],
+        ];
     }
 
+    /**
+     * Display the dashboard view.
+     */
     public function index()
     {
-        return view('dashboard', ['zones' => $this->getZones()]);
+        return view('dashboard', ['detectors' => $this->getDetectors()]);
     }
 
+    /**
+     * Display the details page for a specific detector.
+     */
     public function zone($id)
     {
-        $zones = $this->getZones();
-        if (!isset($zones[$id])) {
+        $detectors = $this->getDetectors();
+        if (!isset($detectors[$id])) {
             abort(404);
         }
+        
+        $detector = $detectors[$id];
+        
+        // Fetch last 20 readings from local DB for this detector (for initial chart & table display)
+        $readings = DetectorReading::where('detector_name', $id)
+            ->orderBy('created_at', 'desc')
+            ->limit(20)
+            ->get()
+            ->reverse(); // chronological order for chart
+
         return view('zone', [
-            'zones' => $zones,
-            'zone' => $zones[$id],
-            'zoneId' => $id
+            'detector' => $detector,
+            'detectorId' => $id,
+            'readings' => $readings,
+            'detectors' => $detectors
         ]);
     }
 
-    public function store(Request $request)
+    /**
+     * API to fetch historical readings of a specific detector.
+     */
+    public function history($id)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'icon' => 'required|string|in:box,server,drop',
-        ]);
+        $detectors = $this->getDetectors();
+        if (!isset($detectors[$id])) {
+            return response()->json(['error' => 'Detector not found'], 404);
+        }
 
-        $zones = $this->getZones();
-        
-        // Simulate initial reading parameters
-        $rate = rand(60, 160);
-        $doseRate = round($rate * 0.0013, 2);
-        $total = round(rand(100, 300) / 100, 2);
-        $status = $doseRate > 0.35 ? 'warn' : 'safe';
-
-        $zones[] = [
-            'name' => $request->name,
-            'icon' => $request->icon,
-            'rate' => $rate,
-            'doseRate' => $doseRate,
-            'total' => $total,
-            'status' => $status
-        ];
-
-        session()->put('zones', $zones);
-
-        return redirect()->route('dashboard')->with('success', 'Zona baru berhasil ditambahkan.');
+        // Fetch last 20 readings from local DB
+        $readings = DetectorReading::where('detector_name', $id)
+            ->orderBy('created_at', 'desc')
+            ->limit(20)
+            ->get()
+            ->reverse(); // chronological order for chart
+            
+        return response()->json($readings->values());
     }
 }
