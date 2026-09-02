@@ -23,7 +23,11 @@
 </head>
 <body>
   @php
-    $user = Auth::user();
+    try {
+        $user = Auth::user();
+    } catch (\Throwable $e) {
+        $user = null;
+    }
     $displayName = $user ? $user->name : 'Operator';
     $email = $user ? $user->email : 'operator@gmail.com';
     $initials = '';
