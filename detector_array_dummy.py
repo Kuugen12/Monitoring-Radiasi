@@ -218,16 +218,30 @@ def estimate_3d_source_position(matrix_heatmap):
 # ==========================================
 # 5. MAIN SCANNING LOOP
 # ==========================================
-def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL):
+def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="COM5", baud=115200):
     conn = init_local_db()
     cursor = conn.cursor()
     
     matrix_heatmap = []
     print("=" * 78)
-    print("  RADIOSCAN MATRIX v2.0 - 72-CH RADIATION ARRAY DETECTOR")
-    print(f"  Total Height Steps: {total_height} | Modul: 3x Xiao Seed (RS485) | Detektor: 72")
+    print("  RADIOSCAN MATRIX - 72-CH RADIATION ARRAY DETECTOR (SIMULATION)")
+    print(f"  Port: {port} | Baud: {baud} | Total Steps: {total_height} | Detektor: 72")
     print(f"  Firebase Sync: {'AKTIF' if USE_FIREBASE else 'NON-AKTIF (Simulasi Lokal)'}")
     print("=" * 78)
+
+    if USE_FIREBASE:
+        try:
+            db.reference('radiation_scans/hardware_config').set({
+                'port': port,
+                'baudrate': baud,
+                'protocol': 'modbus',
+                'total_height': total_height,
+                'sampling_interval_ms': int(delay * 1000),
+                'last_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            print(f"[FIREBASE] Hardware config (Port: {port}, Baud: {baud}) disinkronkan.")
+        except Exception as fb_err:
+            print(f"[FIREBASE WARNING] Gagal sinkronisasi hardware_config: {fb_err}")
 
     for height in range(1, total_height + 1):
         print(f"\n>>> [TINGGI SCAN: {height}/{total_height}] Request data Modbus RS485 (XS1, XS2, XS3)...")
@@ -369,7 +383,12 @@ def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL):
         print(f" Tinggi_{h_idx+1:02d} | {row_str}")
 
 if __name__ == "__main__":
-    # Dukungan argumen command line opsional
-    total_steps = int(sys.argv[1]) if len(sys.argv) > 1 else TOTAL_HEIGHT_SCAN
-    step_delay = float(sys.argv[2]) if len(sys.argv) > 2 else SAMPLING_INTERVAL
-    run_scanning(total_height=total_steps, delay=step_delay)
+    import argparse
+    parser = argparse.ArgumentParser(description="RADIOSCAN MATRIX - 72-Detector Simulation Gateway")
+    parser.add_argument("--port", "-p", type=str, default="COM5", help="Nama port serial/COM hardware (Default: COM5)")
+    parser.add_argument("--baud", "-b", type=int, default=115200, help="Baudrate komunikasi serial (Default: 115200)")
+    parser.add_argument("--steps", "-s", type=int, default=TOTAL_HEIGHT_SCAN, help=f"Jumlah level tinggi (Default: {TOTAL_HEIGHT_SCAN})")
+    parser.add_argument("--delay", "-d", type=float, default=SAMPLING_INTERVAL, help="Jeda waktu per-step dalam detik (Default: 1.0)")
+    args = parser.parse_args()
+
+    run_scanning(total_height=args.steps, delay=args.delay, port=args.port, baud=args.baud)

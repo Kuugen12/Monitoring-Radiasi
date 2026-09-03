@@ -377,6 +377,36 @@ def print_terminal_heatmap(full_72_data, max_cps):
     print(f"   [Array 72-Ch]: [{bar}] (Max: {max_cps} CPS)")
 
 
+def select_com_port_interactive(default_port=DEFAULT_SERIAL_PORT):
+    """Menampilkan menu pemilihan port COM interaktif."""
+    if not HAS_PYSERIAL:
+        return default_port
+    ports = list(serial.tools.list_ports.comports())
+    if not ports:
+        print(f"[INFO] Tidak ada port COM fisik yang terdeteksi. Menggunakan default: {default_port}")
+        return default_port
+    print("\n" + "=" * 60)
+    print("  PILIH PORT SERIAL / COM HARDWARE:")
+    print("=" * 60)
+    for idx, p in enumerate(ports):
+        marker = " [DEFAULT]" if p.device.upper() == default_port.upper() else ""
+        print(f"  [{idx + 1}] {p.device} - {p.description}{marker}")
+    print(f"  [0] Gunakan default ({default_port})")
+    print("=" * 60)
+    try:
+        choice = input(f"Pilih nomor port [1-{len(ports)}] atau tekan Enter untuk ({default_port}): ").strip()
+        if not choice or choice == "0":
+            return default_port
+        idx_choice = int(choice) - 1
+        if 0 <= idx_choice < len(ports):
+            selected = ports[idx_choice].device
+            print(f"[OK] Port dipilih: {selected}\n")
+            return selected
+    except Exception:
+        pass
+    return default_port
+
+
 # ==============================================================================
 # 6. PIPELINE AKUISISI REAL HARDWARE UTAMA
 # ==============================================================================
@@ -392,11 +422,26 @@ def run_real_hardware_scanning(
     Fungsi utama untuk menjalankan akuisisi data dari 72-channel sensor nyata.
     """
     print("=" * 82)
-    print("  RADIOSCAN MATRIX v2.0 - GATEWAY AKUISISI DETEKTOR FISIK 72-CHANNEL")
+    print("  RADIOSCAN MATRIX - GATEWAY AKUISISI DETEKTOR FISIK 72-CHANNEL")
     print(f"  Port Serial: {port_name} | Baudrate: {baud_rate} | Protokol: {protocol.upper()}")
     print(f"  Target Scan: {total_height} Level Ketinggian | Mode: {scan_mode.upper()}")
     print(f"  Firebase Sync: {'AKTIF' if USE_FIREBASE else 'NON-AKTIF'}")
     print("=" * 82)
+
+    # Sinkronisasi konfigurasi aktif ke Firebase
+    if USE_FIREBASE:
+        try:
+            db.reference('radiation_scans/hardware_config').set({
+                'port': port_name,
+                'baudrate': baud_rate,
+                'protocol': protocol,
+                'total_height': total_height,
+                'sampling_interval_ms': int(sampling_delay * 1000),
+                'last_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            })
+            print(f"[FIREBASE] Konfigurasi port {port_name} & baudrate {baud_rate} disinkronkan ke Web Dashboard.")
+        except Exception as fb_err:
+            print(f"[FIREBASE WARNING] Gagal sinkronisasi hardware_config: {fb_err}")
 
     # Buka Port Serial
     ser = None
@@ -627,9 +672,14 @@ if __name__ == "__main__":
         help="Protokol komunikasi: 'modbus' (Modbus RTU RS-485) atau 'ascii' (Serial JSON/CSV)"
     )
     parser.add_argument(
-        "--list-ports",
+        "--list-ports", "-l",
         action="store_true",
         help="Tampilkan semua port COM/Serial yang terdeteksi lalu keluar"
+    )
+    parser.add_argument(
+        "--interactive", "-i",
+        action="store_true",
+        help="Buka menu pemilihan port COM interaktif sebelum mulai"
     )
 
     args = parser.parse_args()
@@ -638,8 +688,12 @@ if __name__ == "__main__":
         list_available_com_ports()
         sys.exit(0)
 
+    chosen_port = args.port
+    if args.interactive:
+        chosen_port = select_com_port_interactive(default_port=args.port)
+
     run_real_hardware_scanning(
-        port_name=args.port,
+        port_name=chosen_port,
         baud_rate=args.baud,
         total_height=args.steps,
         sampling_delay=args.delay,

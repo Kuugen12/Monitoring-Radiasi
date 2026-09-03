@@ -22,7 +22,6 @@
       </div>
       <div class="matrix-title-group">
         <h1>RADIOSCAN <span class="brand-accent">MATRIX</span></h1>
-        <span class="version-pill">v2.0 PRO</span>
       </div>
     </div>
 
@@ -89,6 +88,24 @@
 
     <!-- Quick Parameter Controls -->
     <div class="params-bar">
+      <div class="param-pill" title="Hardware Serial / COM Port selection">
+        <label for="inputComPort">COM:</label>
+        <select id="inputComPort" onchange="updateComPort(this.value)">
+          <option value="COM1">COM1</option>
+          <option value="COM2">COM2</option>
+          <option value="COM3">COM3</option>
+          <option value="COM4">COM4</option>
+          <option value="COM5" selected>COM5</option>
+          <option value="COM6">COM6</option>
+          <option value="COM7">COM7</option>
+          <option value="COM8">COM8</option>
+          <option value="COM9">COM9</option>
+          <option value="COM10">COM10</option>
+          <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
+          <option value="/dev/ttyACM0">/dev/ttyACM0</option>
+        </select>
+      </div>
+
       <div class="param-pill" title="Total scanning height levels">
         <label for="inputTotalHeight">Steps:</label>
         <input type="number" id="inputTotalHeight" value="10" min="1" max="50" onchange="updateTotalHeights(this.value)">
@@ -106,10 +123,13 @@
 
       <div class="param-pill" title="RS485 Modbus baudrate">
         <label for="inputBaudrate">Baud:</label>
-        <select id="inputBaudrate" onchange="document.getElementById('headerBaudrate').textContent = this.value">
+        <select id="inputBaudrate" onchange="updateBaudrate(this.value)">
           <option value="115200" selected>115200</option>
           <option value="9600">9600</option>
+          <option value="19200">19200</option>
+          <option value="38400">38400</option>
           <option value="57600">57600</option>
+          <option value="230400">230400</option>
         </select>
       </div>
 
@@ -467,6 +487,8 @@
 
 // 1. GLOBAL STATE & CONFIGURATION
 const APP_STATE = {
+  selectedComPort: 'COM5',
+  selectedBaudrate: 115200,
   totalHeights: 10,
   currentHeight: 0,
   samplingIntervalMs: 1000,
@@ -1470,10 +1492,64 @@ function updateTotalHeights(val) {
   renderMatrixHeatmap();
 }
 
+function updateComPort(val) {
+  if (!val) return;
+  APP_STATE.selectedComPort = val;
+  const headerPort = document.getElementById('headerComPort');
+  if (headerPort) headerPort.textContent = val;
+  const sel = document.getElementById('inputComPort');
+  if (sel && sel.value !== val) sel.value = val;
+
+  try { localStorage.setItem('radioscan_com_port', val); } catch(e) {}
+  logTerminal(`<span class="log-badge-ok">[PORT]</span> Active Hardware Port set to <strong>${val}</strong>`);
+
+  if (APP_STATE.useFirebase && firebaseDb) {
+    try {
+      firebaseDb.ref('radiation_scans/hardware_config/port').set(val);
+      firebaseDb.ref('radiation_scans/hardware_config/last_updated').set(new Date().toISOString());
+    } catch(err) {
+      console.warn("[Firebase] Could not sync COM port:", err);
+    }
+  }
+}
+
+function updateBaudrate(val) {
+  const baud = parseInt(val) || 115200;
+  APP_STATE.selectedBaudrate = baud;
+  const headerBaud = document.getElementById('headerBaudrate');
+  if (headerBaud) headerBaud.textContent = baud;
+  const selBaud = document.getElementById('inputBaudrate');
+  if (selBaud && parseInt(selBaud.value) !== baud) selBaud.value = baud;
+
+  try { localStorage.setItem('radioscan_baud_rate', baud); } catch(e) {}
+  logTerminal(`<span class="log-badge-ok">[BAUD]</span> Baudrate configured: <strong>${baud}</strong> bps`);
+
+  if (APP_STATE.useFirebase && firebaseDb) {
+    try {
+      firebaseDb.ref('radiation_scans/hardware_config/baudrate').set(baud);
+      firebaseDb.ref('radiation_scans/hardware_config/last_updated').set(new Date().toISOString());
+    } catch(err) {
+      console.warn("[Firebase] Could not sync Baudrate:", err);
+    }
+  }
+}
+
 function updateSamplingInterval(val) {
   APP_STATE.samplingIntervalMs = parseInt(val) || 1000;
   const hz = (1000 / APP_STATE.samplingIntervalMs).toFixed(1);
   document.getElementById('liveStatusText').textContent = `${hz} Hz`;
+  logTerminal(`<span class="log-badge-ok">[CONFIG]</span> Sampling rate set to <strong>${hz} Hz</strong> (${val}ms)`);
+
+  if (APP_STATE.useFirebase && firebaseDb) {
+    try {
+      firebaseDb.ref('radiation_scans/hardware_config/sampling_interval_ms').set(APP_STATE.samplingIntervalMs);
+    } catch(e) {}
+  }
+
+  if (APP_STATE.isScanning && !APP_STATE.isPaused) {
+    clearInterval(APP_STATE.scanIntervalId);
+    APP_STATE.scanIntervalId = setInterval(executeScanCycle, APP_STATE.samplingIntervalMs);
+  }
 }
 
 function updateThreshold(val) {
@@ -1607,6 +1683,26 @@ document.addEventListener('DOMContentLoaded', () => {
   render3DSourceViewport();
   renderTopViewXZ();
 
+  // Load saved COM port and Baudrate preferences
+  try {
+    const savedPort = localStorage.getItem('radioscan_com_port');
+    if (savedPort) {
+      APP_STATE.selectedComPort = savedPort;
+      const selPort = document.getElementById('inputComPort');
+      if (selPort) selPort.value = savedPort;
+      const headerPort = document.getElementById('headerComPort');
+      if (headerPort) headerPort.textContent = savedPort;
+    }
+    const savedBaud = localStorage.getItem('radioscan_baud_rate');
+    if (savedBaud) {
+      APP_STATE.selectedBaudrate = parseInt(savedBaud);
+      const selBaud = document.getElementById('inputBaudrate');
+      if (selBaud) selBaud.value = savedBaud;
+      const headerBaud = document.getElementById('headerBaudrate');
+      if (headerBaud) headerBaud.textContent = savedBaud;
+    }
+  } catch(e) {}
+
   // Listen to global theme change events
   window.addEventListener('themeChanged', (e) => {
     updateChartTheme(e.detail.isLight);
@@ -1617,6 +1713,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Listen to remote Firebase updates
   if (firebaseDb) {
+    // 1. Hardware Config Sync (COM Port, Baudrate, Sampling Rate)
+    firebaseDb.ref('radiation_scans/hardware_config').on('value', (snapshot) => {
+      const cfg = snapshot.val();
+      if (cfg) {
+        if (cfg.port && cfg.port !== APP_STATE.selectedComPort) {
+          APP_STATE.selectedComPort = cfg.port;
+          const selPort = document.getElementById('inputComPort');
+          if (selPort) {
+            let exists = false;
+            for (let i = 0; i < selPort.options.length; i++) {
+              if (selPort.options[i].value === cfg.port) { exists = true; break; }
+            }
+            if (!exists) {
+              const opt = new Option(cfg.port, cfg.port, true, true);
+              selPort.add(opt);
+            }
+            selPort.value = cfg.port;
+          }
+          const headerPort = document.getElementById('headerComPort');
+          if (headerPort) headerPort.textContent = cfg.port;
+          logTerminal(`<span class="log-badge-ok">[SYNC]</span> Hardware port synced with device: <strong>${cfg.port}</strong>`);
+        }
+        if (cfg.baudrate && cfg.baudrate !== APP_STATE.selectedBaudrate) {
+          APP_STATE.selectedBaudrate = parseInt(cfg.baudrate);
+          const selBaud = document.getElementById('inputBaudrate');
+          if (selBaud) selBaud.value = cfg.baudrate;
+          const headerBaud = document.getElementById('headerBaudrate');
+          if (headerBaud) headerBaud.textContent = cfg.baudrate;
+        }
+      }
+    });
+
+    // 2. Latest Scan Readings Sync
     firebaseDb.ref('radiation_scans/latest').on('value', (snapshot) => {
       const val = snapshot.val();
       if (val && val.full_72_array) {
@@ -1629,6 +1758,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    // 3. Matrix Data Sync
     firebaseDb.ref('radiation_scans/matrix_data').on('value', (snapshot) => {
       const val = snapshot.val();
       if (val && val.matrix && !APP_STATE.isScanning) {
