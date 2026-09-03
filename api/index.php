@@ -1,5 +1,10 @@
 <?php
 
+// Enable error reporting during initialization to help diagnose
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 // 1. Prepare temporary directories in /tmp (the only writable directory in Vercel Serverless)
 $tmpStorage = '/tmp/storage';
 $tmpCache = '/tmp/bootstrap/cache';
@@ -23,45 +28,20 @@ foreach ($dirs as $dir) {
     }
 }
 
-// 2. Prepare SQLite file in /tmp if not present
-if (!file_exists('/tmp/database.sqlite')) {
-    @touch('/tmp/database.sqlite');
-}
+// 2. Set environment variables to point caches and storage to /tmp
+putenv("APP_CONFIG_CACHE={$tmpCache}/config.php");
+putenv("APP_EVENTS_CACHE={$tmpCache}/events.php");
+putenv("APP_PACKAGES_CACHE={$tmpCache}/packages.php");
+putenv("APP_ROUTES_CACHE={$tmpCache}/routes.php");
+putenv("APP_SERVICES_CACHE={$tmpCache}/services.php");
+putenv("VIEW_COMPILED_PATH={$tmpStorage}/framework/views");
+putenv("LARAVEL_STORAGE_PATH={$tmpStorage}");
 
-// 3. Set environment variables to point caches and storage to /tmp
-$envDefaults = [
-    'APP_ENV' => 'production',
-    'APP_KEY' => 'base64:cTBUjwDqOHwXKgi9HpkppQxoZ37Ch3S0DMnfE5xL4ZI=',
-    'APP_CONFIG_CACHE' => "{$tmpCache}/config.php",
-    'APP_EVENTS_CACHE' => "{$tmpCache}/events.php",
-    'APP_PACKAGES_CACHE' => "{$tmpCache}/packages.php",
-    'APP_ROUTES_CACHE' => "{$tmpCache}/routes.php",
-    'APP_SERVICES_CACHE' => "{$tmpCache}/services.php",
-    'VIEW_COMPILED_PATH' => "{$tmpStorage}/framework/views",
-    'LARAVEL_STORAGE_PATH' => $tmpStorage,
-    'CACHE_DRIVER' => 'array',
-    'SESSION_DRIVER' => 'cookie',
-    'SESSION_LIFETIME' => '120',
-    'LOG_CHANNEL' => 'stderr',
-    'DB_CONNECTION' => 'sqlite',
-    'DB_DATABASE' => '/tmp/database.sqlite',
-    'FIREBASE_API_KEY' => 'AIzaSyCuDdzt-rPaIMCvbygJsltvjqN-xU-Cffs',
-    'FIREBASE_AUTH_DOMAIN' => 'magang-brin-27225.firebaseapp.com',
-    'FIREBASE_DATABASE_URL' => 'https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app',
-    'FIREBASE_PROJECT_ID' => 'magang-brin-27225',
-    'FIREBASE_STORAGE_BUCKET' => 'magang-brin-27225.firebasestorage.app',
-    'FIREBASE_MESSAGING_SENDER_ID' => '667290386705',
-    'FIREBASE_APP_ID' => '1:667290386705:web:98d56d01ce1043fa114cb0',
-    'FIREBASE_MEASUREMENT_ID' => 'G-82QLN7Q97H',
-];
+$_ENV['LARAVEL_STORAGE_PATH'] = $tmpStorage;
+$_SERVER['LARAVEL_STORAGE_PATH'] = $tmpStorage;
+$_ENV['VIEW_COMPILED_PATH'] = "{$tmpStorage}/framework/views";
+$_SERVER['VIEW_COMPILED_PATH'] = "{$tmpStorage}/framework/views";
 
-foreach ($envDefaults as $key => $val) {
-    if (!getenv($key)) {
-        putenv("{$key}={$val}");
-        $_ENV[$key] = $val;
-        $_SERVER[$key] = $val;
-    }
-}
-
-// 4. Forward execution to Laravel's public entry point
+// 3. Forward execution to Laravel's public entry point
 require __DIR__ . '/../public/index.php';
+

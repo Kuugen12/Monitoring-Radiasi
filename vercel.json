@@ -53,7 +53,6 @@
     "DB_DATABASE": "magang",
     "DB_USERNAME": "4FxUazxpWaqzAS1.root",
     "DB_PASSWORD": "Dq37CUJZIRiMM4QG",
-    "MYSQL_ATTR_SSL_CA": "true",
     "FIREBASE_API_KEY": "AIzaSyCuDdzt-rPaIMCvbygJsltvjqN-xU-Cffs",
     "FIREBASE_AUTH_DOMAIN": "magang-brin-27225.firebaseapp.com",
     "FIREBASE_DATABASE_URL": "https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app",
