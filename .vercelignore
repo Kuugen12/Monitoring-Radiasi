@@ -10,4 +10,7 @@ serviceAccountKey.json
 tests
 wordpress/
 firmware/
+requirements.txt
+*.py
+
 
