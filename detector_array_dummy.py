@@ -15,14 +15,14 @@ import sqlite3
 import csv
 
 try:
-    import pandas as pd
+    import pandas as pd  # type: ignore
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
 
 try:
-    import firebase_admin
-    from firebase_admin import credentials, db
+    import firebase_admin  # type: ignore
+    from firebase_admin import credentials, db  # type: ignore
     HAS_FIREBASE_ADMIN = True
 except ImportError:
     HAS_FIREBASE_ADMIN = False

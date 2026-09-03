@@ -31,27 +31,27 @@ import struct
 
 # Optional Dependencies
 try:
-    import serial
-    import serial.tools.list_ports
+    import serial  # type: ignore
+    import serial.tools.list_ports  # type: ignore
     HAS_PYSERIAL = True
 except ImportError:
     HAS_PYSERIAL = False
 
 try:
-    import pymysql
+    import pymysql  # type: ignore
     HAS_PYMYSQL = True
 except ImportError:
     HAS_PYMYSQL = False
 
 try:
-    import pandas as pd
+    import pandas as pd  # type: ignore
     HAS_PANDAS = True
 except ImportError:
     HAS_PANDAS = False
 
 try:
-    import firebase_admin
-    from firebase_admin import credentials, db
+    import firebase_admin  # type: ignore
+    from firebase_admin import credentials, db  # type: ignore
     HAS_FIREBASE_ADMIN = True
 except ImportError:
     HAS_FIREBASE_ADMIN = False
