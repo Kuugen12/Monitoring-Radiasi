@@ -9,3 +9,6 @@ heatmap_radiation_matrix.csv
 heatmap_radiation_matrix.dat
 serviceAccountKey.json
 tests
+wordpress/
+firmware/
+

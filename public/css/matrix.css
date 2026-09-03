@@ -46,6 +46,38 @@
   --transition-smooth: 0.28s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+:root.light-mode,
+html.light-mode {
+  --bg-deep: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.92);
+  --bg-card-solid: #ffffff;
+  --bg-card-hover: rgba(241, 245, 249, 0.95);
+  --bg-elevated: #ffffff;
+  --bg-input: #ffffff;
+  
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-glass: rgba(0, 0, 0, 0.1);
+  --border-active: rgba(37, 99, 235, 0.5);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-dim: #94a3b8;
+  
+  --accent-blue: #2563eb;
+  --accent-cyan: #0891b2;
+  --accent-emerald: #059669;
+  --accent-amber: #d97706;
+  --accent-rose: #e11d48;
+  --accent-violet: #7c3aed;
+  
+  --glow-emerald: rgba(5, 150, 105, 0.15);
+  --glow-blue: rgba(37, 99, 235, 0.15);
+  --glow-amber: rgba(217, 119, 6, 0.15);
+  --glow-rose: rgba(225, 29, 72, 0.15);
+}
+
 /* Base Reset & Typography */
 * {
   box-sizing: border-box;
@@ -156,7 +188,7 @@ body.matrix-body {
   font-size: 16px;
   font-weight: 800;
   letter-spacing: 0.8px;
-  color: #ffffff;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -783,7 +815,7 @@ body.matrix-body {
 
 .channel-readout-chip .c-val {
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .channel-readout-chip.hotspot {
@@ -1009,7 +1041,7 @@ body.matrix-body {
 .tt-det-title {
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .tt-mod-tag {
@@ -1036,7 +1068,7 @@ body.matrix-body {
 
 .tt-stat-row .tt-val {
   font-weight: 600;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .tt-stat-row .tt-val.hotspot {
@@ -1190,7 +1222,7 @@ body.matrix-body {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .hud-stat-box .h-val.highlight {
@@ -1272,7 +1304,7 @@ body.matrix-body {
   font-family: var(--font-mono);
   font-size: 20px;
   font-weight: 800;
-  color: #ffffff;
+  color: var(--text-primary);
   display: flex;
   align-items: baseline;
   gap: 4px;
@@ -1407,3 +1439,437 @@ body.matrix-body {
 .log-badge-alert { color: #fb7185; font-weight: 700; }
 .log-badge-warn { color: #fbbf24; font-weight: 600; }
 .log-badge-modbus { color: #60a5fa; font-weight: 600; }
+
+/* ==========================================================================
+   8. LIGHT MODE ULTRA-CLEAN SCIENTIFIC OVERRIDES
+   ========================================================================== */
+
+html.light-mode body.matrix-body,
+html.light-mode body {
+  background-color: var(--bg-deep);
+  color: var(--text-primary);
+  background-image: 
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(37, 99, 235, 0.06), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 90%, rgba(5, 150, 105, 0.04), transparent),
+    linear-gradient(to bottom, #ffffff, var(--bg-deep));
+}
+
+html.light-mode ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+html.light-mode ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Header & Badges in Light Mode */
+html.light-mode .matrix-header {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+}
+
+html.light-mode .nuclear-badge {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: rgba(217, 119, 6, 0.4);
+  box-shadow: 0 0 16px rgba(217, 119, 6, 0.15);
+}
+
+html.light-mode .version-pill {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+html.light-mode .hud-chip {
+  background: #ffffff;
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+html.light-mode .hud-chip strong {
+  color: var(--text-primary) !important;
+}
+
+html.light-mode .hud-chip.live-chip {
+  background: rgba(5, 150, 105, 0.08);
+  border-color: rgba(5, 150, 105, 0.3);
+  color: #059669;
+}
+
+html.light-mode .module-chip {
+  background: #f8fafc;
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+html.light-mode .module-chip.online {
+  border-color: rgba(37, 99, 235, 0.3);
+  color: var(--text-primary);
+}
+
+html.light-mode .hud-chip.progress-chip {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.25);
+  color: #2563eb;
+}
+
+html.light-mode .hud-chip.progress-chip strong {
+  color: #1d4ed8 !important;
+}
+
+/* Controls & Buttons in Light Mode */
+html.light-mode .control-deck {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .btn-outline {
+  background: #ffffff;
+  color: var(--text-primary);
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+html.light-mode .btn-outline:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: rgba(0, 0, 0, 0.2);
+  color: var(--text-primary);
+}
+
+html.light-mode .btn-reset {
+  background: rgba(225, 29, 72, 0.08);
+  color: #e11d48;
+  border-color: rgba(225, 29, 72, 0.25);
+}
+
+html.light-mode .btn-reset:hover:not(:disabled) {
+  background: rgba(225, 29, 72, 0.16);
+  color: #be123c;
+  border-color: #e11d48;
+}
+
+html.light-mode .param-pill {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+html.light-mode .param-pill select option {
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+html.light-mode .cloud-sync-pill {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  color: var(--text-muted);
+}
+
+html.light-mode .cloud-sync-pill.active {
+  background: rgba(5, 150, 105, 0.08);
+  border-color: rgba(5, 150, 105, 0.35);
+  color: #059669;
+}
+
+/* Sidebar & Panels in Light Mode */
+html.light-mode .panel-card {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .panel-head {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom-color: var(--border-subtle);
+}
+
+html.light-mode .panel-badge {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-muted);
+}
+
+html.light-mode .loop-row {
+  background: #f8fafc;
+  border-color: rgba(0, 0, 0, 0.04);
+}
+
+html.light-mode .loop-row:hover {
+  background: #f1f5f9;
+  border-color: var(--border-subtle);
+}
+
+html.light-mode .loop-row.active {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+html.light-mode .loop-row.has-hotspot {
+  background: rgba(225, 29, 72, 0.08);
+  border-color: rgba(225, 29, 72, 0.3);
+}
+
+html.light-mode .loop-height-tag {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-muted);
+}
+
+html.light-mode .loop-btn-bar {
+  border-top-color: var(--border-subtle);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+html.light-mode .btn-micro {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  color: var(--text-secondary);
+}
+
+html.light-mode .btn-micro:hover {
+  background: #f1f5f9;
+  color: var(--text-primary);
+}
+
+html.light-mode .mod-summary-card {
+  background: #f8fafc;
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .channel-order-code-box {
+  background: #f8fafc;
+  border-color: var(--border-subtle);
+  color: #475569;
+}
+
+html.light-mode .individual-channels-scroll {
+  background: #f8fafc;
+  border-color: var(--border-subtle);
+}
+
+html.light-mode .channel-readout-chip {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+html.light-mode .channel-readout-chip .c-name {
+  color: var(--text-muted);
+}
+
+html.light-mode .channel-readout-chip .c-val {
+  color: var(--text-primary);
+}
+
+html.light-mode .channel-readout-chip.hotspot {
+  background: rgba(225, 29, 72, 0.1);
+  border-color: #e11d48;
+}
+
+html.light-mode .channel-readout-chip.hotspot .c-val {
+  color: #e11d48;
+}
+
+html.light-mode .detector-dots-grid {
+  background: #f1f5f9;
+  border-color: var(--border-subtle);
+}
+
+html.light-mode .det-dot {
+  background: #cbd5e1;
+}
+
+/* Viewport Tabs & Stage in Light Mode */
+html.light-mode .segmented-tabs {
+  background: #e2e8f0;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html.light-mode .tab-pill-btn {
+  color: var(--text-secondary);
+}
+
+html.light-mode .tab-pill-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.6);
+}
+
+html.light-mode .tab-pill-btn.active {
+  background: #ffffff;
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+html.light-mode .palette-picker {
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+html.light-mode .palette-picker select option {
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+html.light-mode .heatmap-stage-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .mod-marker {
+  background: #f8fafc;
+}
+
+html.light-mode .canvas-viewport-wrapper {
+  background: #f8fafc;
+  border-color: var(--border-subtle);
+}
+
+html.light-mode .matrix-tooltip {
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(37, 99, 235, 0.35);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+html.light-mode .tt-det-title {
+  color: var(--text-primary);
+}
+
+html.light-mode .tt-stat-row {
+  color: var(--text-secondary);
+}
+
+html.light-mode .tt-stat-row .tt-val {
+  color: var(--text-primary);
+}
+
+html.light-mode .tt-stat-row .tt-val.hotspot {
+  color: #e11d48;
+}
+
+html.light-mode .colorbar-track {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html.light-mode .matrix-raw-table th {
+  background: #f1f5f9;
+  color: var(--text-primary);
+  border-bottom-color: var(--border-subtle);
+}
+
+html.light-mode .matrix-raw-table td {
+  color: var(--text-secondary);
+  border-bottom-color: rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .matrix-raw-table td.cell-hotspot {
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
+}
+
+/* Spatial & 3D Cards in Light Mode */
+html.light-mode .hud-spatial-card {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .spatial-head {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom-color: var(--border-subtle);
+}
+
+html.light-mode .canvas-spatial-stage {
+  background: #f8fafc;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+html.light-mode .spatial-hud-overlay {
+  background: #ffffff;
+  border-top-color: var(--border-subtle);
+}
+
+html.light-mode .hud-stat-box .h-lbl {
+  color: var(--text-muted);
+}
+
+html.light-mode .hud-stat-box .h-val {
+  color: var(--text-primary);
+}
+
+html.light-mode .hud-stat-box .h-val.highlight {
+  color: #0284c7;
+}
+
+html.light-mode .hud-stat-box .h-val.alert {
+  color: #e11d48;
+}
+
+/* Telemetry KPI Deck in Light Mode */
+html.light-mode .kpi-tile {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+html.light-mode .kpi-tile:hover {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+}
+
+html.light-mode .kpi-header {
+  color: var(--text-muted);
+}
+
+html.light-mode .kpi-number {
+  color: var(--text-primary);
+}
+
+html.light-mode .kpi-number .kpi-unit {
+  color: var(--text-muted);
+}
+
+html.light-mode .kpi-subtext {
+  color: var(--text-dim);
+}
+
+html.light-mode .kpi-tile.kpi-peak .kpi-number {
+  color: #e11d48;
+}
+
+/* Charts & Modbus Terminal in Light Mode */
+html.light-mode .chart-panel-card {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .terminal-window-card {
+  background: #ffffff;
+  border-color: var(--border-glass);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+}
+
+html.light-mode .terminal-title-bar {
+  background: #f8fafc;
+  border-bottom-color: var(--border-subtle);
+}
+
+html.light-mode .terminal-title {
+  color: var(--text-primary);
+}
+
+html.light-mode .btn-term-action {
+  color: var(--text-muted);
+}
+
+html.light-mode .btn-term-action:hover {
+  background: #e2e8f0;
+  color: var(--text-primary);
+}
+
+html.light-mode .terminal-console-body {
+  background: #ffffff;
+  color: #334155;
+}
+
+html.light-mode .terminal-console-body .log-t {
+  color: #94a3b8;
+}
+
+html.light-mode .log-badge-ok { color: #059669; font-weight: 600; }
+html.light-mode .log-badge-alert { color: #e11d48; font-weight: 700; }
+html.light-mode .log-badge-warn { color: #d97706; font-weight: 600; }
+html.light-mode .log-badge-modbus { color: #2563eb; font-weight: 600; }
+

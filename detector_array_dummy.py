@@ -20,6 +20,16 @@ try:
 except ImportError:
     HAS_PANDAS = False
 
+try:
+    import firebase_admin
+    from firebase_admin import credentials, db
+    HAS_FIREBASE_ADMIN = True
+except ImportError:
+    HAS_FIREBASE_ADMIN = False
+    firebase_admin = None
+    credentials = None
+    db = None
+
 # ==========================================
 # 1. KONFIGURASI SISTEM & FIREBASE
 # ==========================================
@@ -36,10 +46,8 @@ USE_FIREBASE = False
 FIREBASE_DATABASE_URL = "https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app"
 SERVICE_ACCOUNT_PATH = "serviceAccountKey.json"
 
-if os.path.exists(SERVICE_ACCOUNT_PATH):
+if os.path.exists(SERVICE_ACCOUNT_PATH) and HAS_FIREBASE_ADMIN and firebase_admin is not None and credentials is not None:
     try:
-        import firebase_admin
-        from firebase_admin import credentials, db
         if not firebase_admin._apps:
             cred = credentials.Certificate(SERVICE_ACCOUNT_PATH)
             firebase_admin.initialize_app(cred, {
@@ -50,16 +58,19 @@ if os.path.exists(SERVICE_ACCOUNT_PATH):
     except Exception as e:
         print(f"[FIREBASE WARNING] Gagal inisialisasi Firebase Admin: {e}")
         USE_FIREBASE = False
+elif not HAS_FIREBASE_ADMIN:
+    print(f"[INFO] Modul 'firebase_admin' belum terpasang. Menjalankan mode logging database lokal & MySQL.")
 else:
     print(f"[INFO] '{SERVICE_ACCOUNT_PATH}' tidak ditemukan. Jalankan mode simulasi lokal.")
 
-# Konfigurasi MySQL (Laragon / phpMyAdmin di PC)
+# Konfigurasi MySQL (TiDB Cloud Serverless)
 USE_MYSQL = True
-MYSQL_HOST = os.environ.get("MYSQL_HOST", "127.0.0.1")  # Ganti dengan IP PC jika dijalankan dari Raspberry Pi
-MYSQL_PORT = int(os.environ.get("MYSQL_PORT", 3306))
-MYSQL_USER = os.environ.get("MYSQL_USER", "root")
-MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "")
+MYSQL_HOST = os.environ.get("MYSQL_HOST", "gateway01.ap-southeast-1.prod.aws.tidbcloud.com")
+MYSQL_PORT = int(os.environ.get("MYSQL_PORT", 4000))
+MYSQL_USER = os.environ.get("MYSQL_USER", "4FxUazxpWaqzAS1.root")
+MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "Dq37CUJZIRiMM4QG")
 MYSQL_DB = os.environ.get("MYSQL_DB", "magang")
+MYSQL_USE_SSL = True
 
 try:
     import pymysql
@@ -68,10 +79,11 @@ except ImportError:
     HAS_PYMYSQL = False
 
 def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
-    """Menyimpan record hasil scan langsung ke MySQL (phpMyAdmin di PC)."""
+    """Menyimpan record hasil scan langsung ke MySQL (TiDB Cloud / phpMyAdmin)."""
     if not HAS_PYMYSQL or not USE_MYSQL:
         return
     try:
+        ssl_config = {'ssl_mode': 'REQUIRED'} if MYSQL_USE_SSL else None
         conn = pymysql.connect(
             host=MYSQL_HOST,
             port=MYSQL_PORT,
@@ -79,7 +91,8 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             password=MYSQL_PASSWORD,
             database=MYSQL_DB,
             charset='utf8mb4',
-            connect_timeout=3
+            ssl=ssl_config,
+            connect_timeout=5
         )
         with conn.cursor() as cursor:
             sql = """

@@ -210,9 +210,15 @@
       }
     }
 
+    function isLightMode() {
+      return document.documentElement.classList.contains('light-mode');
+    }
+
     // Initialize Chart.js
     function initChart() {
       const ctx = document.getElementById('zoneChartCanvas').getContext('2d');
+      const isLight = isLightMode();
+
       zoneChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -221,22 +227,22 @@
             {
               label: 'Count Rate (cpm)',
               data: [],
-              borderColor: '#ffc53d',
-              backgroundColor: 'rgba(255,197,61,0.04)',
+              borderColor: isLight ? '#d97706' : '#ffc53d',
+              backgroundColor: isLight ? 'rgba(217,119,6,0.08)' : 'rgba(255,197,61,0.04)',
               borderWidth: 2.2,
               pointRadius: 3,
-              pointBackgroundColor: '#ffc53d',
+              pointBackgroundColor: isLight ? '#d97706' : '#ffc53d',
               tension: 0.35,
               yAxisID: 'y'
             },
             {
               label: 'Dose Rate (µSv/h)',
               data: [],
-              borderColor: '#38d996',
-              backgroundColor: 'rgba(56,217,150,0.04)',
+              borderColor: isLight ? '#059669' : '#38d996',
+              backgroundColor: isLight ? 'rgba(5,150,105,0.08)' : 'rgba(56,217,150,0.04)',
               borderWidth: 2.2,
               pointRadius: 3,
-              pointBackgroundColor: '#38d996',
+              pointBackgroundColor: isLight ? '#059669' : '#38d996',
               tension: 0.35,
               yAxisID: 'y1'
             }
@@ -249,30 +255,42 @@
             legend: {
               display: true,
               labels: {
-                color: 'var(--muted)',
+                color: isLight ? '#475569' : '#94a3b8',
                 font: { family: "'Inter'", size: 12 }
               }
             }
           },
           scales: {
             x: {
-              grid: { color: 'var(--border)' },
-              ticks: { color: 'var(--muted)', font: { family: "'IBM Plex Mono'", size: 10 } }
+              grid: { color: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' },
+              ticks: { color: isLight ? '#64748b' : '#94a3b8', font: { family: "'IBM Plex Mono'", size: 10 } }
             },
             y: {
               position: 'left',
-              grid: { color: 'var(--border)' },
-              ticks: { color: '#ffc53d', font: { family: "'IBM Plex Mono'", size: 10 } }
+              grid: { color: isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)' },
+              ticks: { color: isLight ? '#d97706' : '#ffc53d', font: { family: "'IBM Plex Mono'", size: 10 } }
             },
             y1: {
               position: 'right',
               grid: { display: false },
-              ticks: { color: '#38d996', font: { family: "'IBM Plex Mono'", size: 10 } }
+              ticks: { color: isLight ? '#059669' : '#38d996', font: { family: "'IBM Plex Mono'", size: 10 } }
             }
           }
         }
       });
     }
+
+    window.addEventListener('themeChanged', (e) => {
+      if (!zoneChart) return;
+      const isLight = e.detail.isLight;
+      zoneChart.options.scales.x.grid.color = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
+      zoneChart.options.scales.x.ticks.color = isLight ? '#64748b' : '#94a3b8';
+      zoneChart.options.scales.y.grid.color = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
+      zoneChart.options.scales.y.ticks.color = isLight ? '#d97706' : '#ffc53d';
+      zoneChart.options.scales.y1.ticks.color = isLight ? '#059669' : '#38d996';
+      zoneChart.options.plugins.legend.labels.color = isLight ? '#475569' : '#94a3b8';
+      zoneChart.update();
+    });
 
     // Initialize layout
     initChart();

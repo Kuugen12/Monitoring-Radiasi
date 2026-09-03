@@ -98,6 +98,7 @@
       const isLight = document.documentElement.classList.toggle('light-mode');
       localStorage.setItem('theme', isLight ? 'light' : 'dark');
       updateThemeIcon(isLight);
+      window.dispatchEvent(new CustomEvent('themeChanged', { detail: { isLight } }));
     });
 
     function updateThemeIcon(isLight) {

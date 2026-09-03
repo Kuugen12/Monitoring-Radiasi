@@ -15,7 +15,8 @@
   --sans:'Inter',system-ui,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,monospace;
 }
-:root.light-mode {
+:root.light-mode,
+html.light-mode {
   --bg: #f5f7fa;
   --sidebar: #ffffff;
   --panel: #ffffff;
@@ -312,6 +313,11 @@ footer.hint{text-align:center;color:var(--muted-2);font-size:11.5px;padding:6px 
   font-size: 13px;
   cursor: pointer;
   transition: filter 0.15s;
+}
+html.light-mode .btn-submit,
+html.light-mode .login-submit,
+html.light-mode .add-sensor {
+  color: #ffffff;
 }
 .btn-submit:hover {
   filter: brightness(1.07);

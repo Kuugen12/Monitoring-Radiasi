@@ -49,10 +49,10 @@
       </div>
 
       <div class="hud-chip">
-        <span>PORT:</span> <strong id="headerComPort" style="color:#fff;">COM5</strong>
+        <span>PORT:</span> <strong id="headerComPort">COM5</strong>
       </div>
       <div class="hud-chip">
-        <span>BAUD:</span> <strong id="headerBaudrate" style="color:#fff;">115200</strong>
+        <span>BAUD:</span> <strong id="headerBaudrate">115200</strong>
       </div>
       <div class="hud-chip progress-chip">
         <span>Z-STEP:</span> <strong id="headerHeightProgress">0 / 10</strong>
@@ -572,11 +572,17 @@ function updateColorbarGradient() {
   gradientEl.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
+// Helper to detect current light mode
+function isLightMode() {
+  return document.documentElement.classList.contains('light-mode');
+}
+
 // 4. CHART.JS REAL-TIME TELEMETRY SETUP
 let telemetryChart = null;
 
 function initTelemetryChart() {
   const ctx = document.getElementById('moduleChartCanvas').getContext('2d');
+  const isLight = isLightMode();
   
   telemetryChart = new Chart(ctx, {
     type: 'line',
@@ -585,8 +591,8 @@ function initTelemetryChart() {
       datasets: [
         {
           label: 'XS1 (D01-D24)',
-          borderColor: '#60A5FA',
-          backgroundColor: 'rgba(96, 165, 250, 0.1)',
+          borderColor: isLight ? '#2563EB' : '#60A5FA',
+          backgroundColor: isLight ? 'rgba(37, 99, 235, 0.1)' : 'rgba(96, 165, 250, 0.1)',
           borderWidth: 2,
           pointRadius: 2.5,
           data: [],
@@ -594,18 +600,18 @@ function initTelemetryChart() {
         },
         {
           label: 'XS2 (D25-D48)',
-          borderColor: '#FBBF24',
-          backgroundColor: 'rgba(251, 191, 36, 0.15)',
+          borderColor: isLight ? '#D97706' : '#FBBF24',
+          backgroundColor: isLight ? 'rgba(217, 119, 6, 0.12)' : 'rgba(251, 191, 36, 0.15)',
           borderWidth: 2,
           pointRadius: 3,
-          pointBackgroundColor: '#F59E0B',
+          pointBackgroundColor: isLight ? '#D97706' : '#F59E0B',
           data: [],
           tension: 0.35
         },
         {
           label: 'XS3 (D49-D72)',
-          borderColor: '#34D399',
-          backgroundColor: 'rgba(52, 211, 153, 0.1)',
+          borderColor: isLight ? '#059669' : '#34D399',
+          backgroundColor: isLight ? 'rgba(5, 150, 105, 0.1)' : 'rgba(52, 211, 153, 0.1)',
           borderWidth: 2,
           pointRadius: 2.5,
           data: [],
@@ -619,21 +625,36 @@ function initTelemetryChart() {
       animation: { duration: 200 },
       scales: {
         x: {
-          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          grid: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)' },
           ticks: { color: '#64748B', font: { family: 'IBM Plex Mono', size: 9.5 } }
         },
         y: {
-          grid: { color: 'rgba(255, 255, 255, 0.05)' },
+          grid: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)' },
           ticks: { color: '#64748B', font: { family: 'IBM Plex Mono', size: 9.5 } }
         }
       },
       plugins: {
         legend: {
-          labels: { color: '#CBD5E1', font: { family: 'IBM Plex Mono', size: 10.5 }, boxWidth: 10 }
+          labels: { color: isLight ? '#334155' : '#CBD5E1', font: { family: 'IBM Plex Mono', size: 10.5 }, boxWidth: 10 }
         }
       }
     }
   });
+}
+
+function updateChartTheme(isLight) {
+  if (!telemetryChart) return;
+  telemetryChart.options.scales.x.grid.color = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)';
+  telemetryChart.options.scales.y.grid.color = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.05)';
+  telemetryChart.options.plugins.legend.labels.color = isLight ? '#334155' : '#CBD5E1';
+  telemetryChart.data.datasets[0].borderColor = isLight ? '#2563EB' : '#60A5FA';
+  telemetryChart.data.datasets[0].backgroundColor = isLight ? 'rgba(37, 99, 235, 0.1)' : 'rgba(96, 165, 250, 0.1)';
+  telemetryChart.data.datasets[1].borderColor = isLight ? '#D97706' : '#FBBF24';
+  telemetryChart.data.datasets[1].backgroundColor = isLight ? 'rgba(217, 119, 6, 0.12)' : 'rgba(251, 191, 36, 0.15)';
+  telemetryChart.data.datasets[1].pointBackgroundColor = isLight ? '#D97706' : '#F59E0B';
+  telemetryChart.data.datasets[2].borderColor = isLight ? '#059669' : '#34D399';
+  telemetryChart.data.datasets[2].backgroundColor = isLight ? 'rgba(5, 150, 105, 0.1)' : 'rgba(52, 211, 153, 0.1)';
+  telemetryChart.update();
 }
 
 // 5. HEATMAP CANVAS RENDERING ENGINE
@@ -644,6 +665,7 @@ let hoveredCell = null;
 function renderMatrixHeatmap() {
   const width = canvas.width;
   const height = canvas.height;
+  const isLight = isLightMode();
   ctx.clearRect(0, 0, width, height);
 
   const numCols = 72;
@@ -651,7 +673,7 @@ function renderMatrixHeatmap() {
   const cellW = width / numCols;
   const cellH = height / numRows;
 
-  ctx.fillStyle = '#040711';
+  ctx.fillStyle = isLight ? '#f8fafc' : '#040711';
   ctx.fillRect(0, 0, width, height);
 
   if (APP_STATE.viewMode === 'contour') {
@@ -678,31 +700,41 @@ function renderMatrixHeatmap() {
         ctx.fillRect(x, y, cellW, cellH);
 
         if (cps >= APP_STATE.hotspotThreshold) {
-          ctx.strokeStyle = '#F43F5E';
+          ctx.strokeStyle = isLight ? '#E11D48' : '#F43F5E';
           ctx.lineWidth = 1.5;
           ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
         } else {
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.25)';
+          ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.25)';
           ctx.lineWidth = 0.5;
           ctx.strokeRect(x, y, cellW, cellH);
         }
       } else {
-        ctx.fillStyle = (r % 2 === c % 2) ? '#0A0F1D' : '#070B16';
-        ctx.fillRect(x, y, cellW, cellH);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+        if (isLight) {
+          ctx.fillStyle = (r % 2 === c % 2) ? '#ffffff' : '#f1f5f9';
+          ctx.fillRect(x, y, cellW, cellH);
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.05)';
+        } else {
+          ctx.fillStyle = (r % 2 === c % 2) ? '#0A0F1D' : '#070B16';
+          ctx.fillRect(x, y, cellW, cellH);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.025)';
+        }
         ctx.lineWidth = 0.5;
         ctx.strokeRect(x, y, cellW, cellH);
       }
     }
 
-    ctx.fillStyle = isCompleted ? '#94A3B8' : '#334155';
+    if (isLight) {
+      ctx.fillStyle = isCompleted ? '#334155' : '#94a3b8';
+    } else {
+      ctx.fillStyle = isCompleted ? '#94A3B8' : '#334155';
+    }
     ctx.font = '600 9px "IBM Plex Mono"';
     ctx.fillText(`L${r + 1 < 10 ? '0' + (r + 1) : r + 1}`, 6, r * cellH + cellH / 2 + 3);
   }
 
   // Vertical Module Boundaries
   ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.25)';
   ctx.lineWidth = 1.5;
   
   const xDivider1 = 24 * cellW;
@@ -723,11 +755,11 @@ function renderMatrixHeatmap() {
     const hx = hoveredCell.col * cellW;
     const hy = hoveredCell.row * cellH;
 
-    ctx.strokeStyle = '#FFFFFF';
+    ctx.strokeStyle = isLight ? '#0f172a' : '#FFFFFF';
     ctx.lineWidth = 2;
     ctx.strokeRect(hx - 0.5, hy - 0.5, cellW + 1, cellH + 1);
 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.2)';
     ctx.setLineDash([2, 2]);
     ctx.beginPath();
     ctx.moveTo(0, hy + cellH / 2);
@@ -741,11 +773,12 @@ function renderMatrixHeatmap() {
 
 // 6. CONTINUOUS CONTOUR VIEW
 function renderContourView(width, height) {
-  ctx.fillStyle = '#040711';
+  const isLight = isLightMode();
+  ctx.fillStyle = isLight ? '#f8fafc' : '#040711';
   ctx.fillRect(0, 0, width, height);
 
   if (APP_STATE.matrixData.length === 0) {
-    ctx.fillStyle = '#64748B';
+    ctx.fillStyle = isLight ? '#64748B' : '#64748B';
     ctx.font = '13px "IBM Plex Mono"';
     ctx.textAlign = 'center';
     ctx.fillText("No scan matrix data acquired yet. Press [START SCAN] to begin.", width / 2, height / 2);
@@ -820,8 +853,9 @@ function render8x9GridView(width, height) {
   const cols = 9;
   const cellW = width / cols;
   const cellH = height / rows;
+  const isLight = isLightMode();
 
-  ctx.fillStyle = '#040711';
+  ctx.fillStyle = isLight ? '#f8fafc' : '#040711';
   ctx.fillRect(0, 0, width, height);
 
   const detectorAverages = new Array(72).fill(0);
@@ -866,9 +900,10 @@ function render3DSourceViewport() {
   const ctx3D = canvas3D.getContext('2d');
   const w = canvas3D.width;
   const h = canvas3D.height;
+  const isLight = isLightMode();
 
   ctx3D.clearRect(0, 0, w, h);
-  ctx3D.fillStyle = '#03060E';
+  ctx3D.fillStyle = isLight ? '#f8fafc' : '#03060E';
   ctx3D.fillRect(0, 0, w, h);
 
   const originX = w * 0.28;
@@ -882,7 +917,7 @@ function render3DSourceViewport() {
   }
 
   // 3D Bounding Cube Wireframe
-  ctx3D.strokeStyle = 'rgba(59, 130, 246, 0.25)';
+  ctx3D.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.35)' : 'rgba(59, 130, 246, 0.25)';
   ctx3D.lineWidth = 1;
 
   const corners = [
@@ -913,7 +948,7 @@ function render3DSourceViewport() {
   ctx3D.closePath();
   ctx3D.stroke();
 
-  ctx3D.fillStyle = '#64748B';
+  ctx3D.fillStyle = isLight ? '#475569' : '#64748B';
   ctx3D.font = '9px "IBM Plex Mono"';
   const pXLabel = project3D(820, 0, 0);
   ctx3D.fillText("X: 800cm", pXLabel.px, pXLabel.py);
@@ -923,7 +958,7 @@ function render3DSourceViewport() {
   // Active Linear Array Bar
   const dStart = project3D(0, 0, APP_STATE.currentHeight * 35);
   const dEnd = project3D(800, 0, APP_STATE.currentHeight * 35);
-  ctx3D.strokeStyle = '#34D399';
+  ctx3D.strokeStyle = isLight ? '#059669' : '#34D399';
   ctx3D.lineWidth = 2.5;
   ctx3D.beginPath();
   ctx3D.moveTo(dStart.px, dStart.py);
@@ -973,12 +1008,13 @@ function renderTopViewXZ() {
   const ctxTop = canvasTop.getContext('2d');
   const w = canvasTop.width;
   const h = canvasTop.height;
+  const isLight = isLightMode();
 
   ctxTop.clearRect(0, 0, w, h);
-  ctxTop.fillStyle = '#03060E';
+  ctxTop.fillStyle = isLight ? '#f8fafc' : '#03060E';
   ctxTop.fillRect(0, 0, w, h);
 
-  ctxTop.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctxTop.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.04)';
   ctxTop.lineWidth = 1;
   for (let x = 0; x < w; x += 40) {
     ctxTop.beginPath();
@@ -997,7 +1033,7 @@ function renderTopViewXZ() {
   const plotW = w - padding * 2;
   const plotH = h - padding * 2;
 
-  ctxTop.strokeStyle = 'rgba(59, 130, 246, 0.4)';
+  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.4)' : 'rgba(59, 130, 246, 0.4)';
   ctxTop.strokeRect(padding, padding, plotW, plotH);
 
   const srcX = padding + (APP_STATE.estimatedSource.x / 800) * plotW;
@@ -1570,6 +1606,14 @@ document.addEventListener('DOMContentLoaded', () => {
   renderMatrixHeatmap();
   render3DSourceViewport();
   renderTopViewXZ();
+
+  // Listen to global theme change events
+  window.addEventListener('themeChanged', (e) => {
+    updateChartTheme(e.detail.isLight);
+    renderMatrixHeatmap();
+    render3DSourceViewport();
+    renderTopViewXZ();
+  });
 
   // Listen to remote Firebase updates
   if (firebaseDb) {
