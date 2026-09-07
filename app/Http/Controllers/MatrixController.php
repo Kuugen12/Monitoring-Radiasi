@@ -24,7 +24,8 @@ class MatrixController extends Controller
     {
         $objectFilter = $request->query('object_name');
         $sessionFilter = $request->query('session_id');
-        $limit = (int) $request->query('limit', 24);
+        $defaultLimit = (!empty($objectFilter) && $objectFilter !== 'ALL') ? 100 : 24;
+        $limit = (int) $request->query('limit', $defaultLimit);
 
         $rows = [];
         $availableObjects = [];
