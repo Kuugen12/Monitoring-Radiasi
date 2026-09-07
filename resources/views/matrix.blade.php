@@ -552,18 +552,24 @@
     </div>
 
     <div class="scan-modal-body">
-      <!-- 1. Identitas Objek -->
+      <!-- 1. Identitas Objek Target (Sinkron TiDB Cloud) -->
       <div class="modal-form-group">
         <label class="modal-label">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          Nama / Identitas Objek Target <span class="req-star">*</span>
+          Nama / Identitas Objek Target (Sesuai TiDB Cloud) <span class="req-star">*</span>
         </label>
-        <input type="text" id="modalInputObjectName" class="modal-text-input" value="Gentong" placeholder="Misal: Gentong Limbah A, Tong Reaktor 01, Drum Silinder...">
+        <input type="text" id="modalInputObjectName" class="modal-text-input" list="tidbObjectDatalist" value="Tong Baru" placeholder="Pilih dari daftar TiDB atau ketik nama baru..." autocomplete="off">
+        <datalist id="tidbObjectDatalist">
+          <option value="Tong Baru">
+          <option value="Gentong">
+          <option value="Gentong Drum Demo">
+          <option value="Gentong Limbah 01">
+        </datalist>
         
-        <!-- Preset Tag Suggestions -->
+        <!-- Preset Tag Suggestions from TiDB -->
         <div class="preset-tag-list" id="modalPresetTagList">
+          <span class="preset-tag active" onclick="selectObjectPreset('Tong Baru')">Tong Baru</span>
           <span class="preset-tag" onclick="selectObjectPreset('Gentong')">Gentong</span>
-          <span class="preset-tag" onclick="selectObjectPreset('Tong Baru')">Tong Baru</span>
           <span class="preset-tag" onclick="selectObjectPreset('Gentong Drum Demo')">Gentong Drum Demo</span>
           <span class="preset-tag" onclick="selectObjectPreset('Gentong Limbah 01')">Gentong Limbah 01</span>
         </div>
@@ -1425,7 +1431,11 @@ function openStartScanModal() {
     return;
   }
 
-  // Pre-fill modal inputs
+  // Pre-fill modal inputs with currently selected TiDB object
+  const selectObj = document.getElementById('selectActiveObject');
+  let activeName = (selectObj && selectObj.value && selectObj.value !== 'ALL') ? selectObj.value : APP_STATE.objectName;
+  if (!activeName || activeName === 'ALL') activeName = 'Tong Baru';
+
   const nameInput = document.getElementById('modalInputObjectName');
   const stepsInput = document.getElementById('modalInputSteps');
   const loopsInput = document.getElementById('modalInputLoops');
@@ -1433,12 +1443,18 @@ function openStartScanModal() {
   const portInput = document.getElementById('modalInputComPort');
   const rateInput = document.getElementById('modalInputSamplingRate');
 
-  if (nameInput) nameInput.value = APP_STATE.objectName || 'Gentong';
+  if (nameInput) nameInput.value = activeName;
   if (stepsInput) stepsInput.value = APP_STATE.totalHeights || 10;
   if (loopsInput) loopsInput.value = APP_STATE.totalLoops || 1;
   if (delayInput) delayInput.value = APP_STATE.transitionDelay || 1.5;
   if (portInput) portInput.value = APP_STATE.selectedComPort || 'COM5';
   if (rateInput) rateInput.value = APP_STATE.samplingIntervalMs || 1000;
+
+  // Highlight matching preset tag if any
+  document.querySelectorAll('#modalPresetTagList .preset-tag').forEach(tag => {
+    if (tag.textContent.startsWith(activeName)) tag.classList.add('active');
+    else tag.classList.remove('active');
+  });
 
   const modal = document.getElementById('modalStartScanConfig');
   if (modal) modal.style.display = 'flex';
@@ -1452,6 +1468,11 @@ function closeStartScanModal() {
 function selectObjectPreset(name) {
   const input = document.getElementById('modalInputObjectName');
   if (input) input.value = name;
+
+  document.querySelectorAll('#modalPresetTagList .preset-tag').forEach(tag => {
+    if (tag.textContent.startsWith(name)) tag.classList.add('active');
+    else tag.classList.remove('active');
+  });
 }
 
 function launchConfiguredScan() {
@@ -1638,7 +1659,7 @@ function saveScanSession() {
     records: APP_STATE.sessionRecords
   };
 
-  fetch('/api/matrix/save-session', {
+  fetch('/matrix-data/save-session', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -2392,12 +2413,13 @@ function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
 function populateObjectDropdown(availableObjects, currentSelected) {
   const selectEl = document.getElementById('selectActiveObject');
   const presetContainer = document.getElementById('modalPresetTagList');
+  const datalist = document.getElementById('tidbObjectDatalist');
   if (!selectEl) return;
 
   const prevVal = selectEl.value;
   selectEl.innerHTML = '';
 
-  // Default Option: Semua Objek
+  // Default Option: Semua Objek (Terbaru)
   const allOpt = document.createElement('option');
   allOpt.value = 'ALL';
   allOpt.textContent = '📦 Semua Objek (Terbaru)';
@@ -2406,6 +2428,9 @@ function populateObjectDropdown(availableObjects, currentSelected) {
   let matchFound = false;
 
   if (Array.isArray(availableObjects) && availableObjects.length > 0) {
+    if (datalist) datalist.innerHTML = '';
+    if (presetContainer) presetContainer.innerHTML = '';
+
     availableObjects.forEach(obj => {
       const opt = document.createElement('option');
       opt.value = obj.object_name;
@@ -2418,19 +2443,24 @@ function populateObjectDropdown(availableObjects, currentSelected) {
         matchFound = true;
       }
       selectEl.appendChild(opt);
-    });
 
-    // Update Modal Presets
-    if (presetContainer) {
-      presetContainer.innerHTML = '';
-      availableObjects.slice(0, 6).forEach(obj => {
+      // Add to Datalist for Modal Auto-complete
+      if (datalist) {
+        const dlOpt = document.createElement('option');
+        dlOpt.value = obj.object_name;
+        datalist.appendChild(dlOpt);
+      }
+
+      // Add to Modal Preset Tags
+      if (presetContainer) {
         const tag = document.createElement('span');
-        tag.className = 'preset-tag';
-        tag.textContent = obj.object_name;
+        tag.className = `preset-tag ${currentSelected === obj.object_name ? 'active' : ''}`;
+        tag.textContent = `${obj.object_name} (${count} scan)`;
+        tag.title = `Peak: ${peak} CPS | Terakhir: ${obj.last_ts || '-'}`;
         tag.onclick = () => selectObjectPreset(obj.object_name);
         presetContainer.appendChild(tag);
-      });
-    }
+      }
+    });
   }
 
   if (currentSelected === 'ALL') {
@@ -2469,17 +2499,20 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
   const btn = document.getElementById('btnRefreshObjects');
   if (btn) btn.classList.add('spinning');
 
-  let url = '/api/matrix/history';
+  let url = '/matrix-data/history';
   if (objectName && objectName !== 'ALL') {
     url += '?object_name=' + encodeURIComponent(objectName);
   }
 
   fetch(url)
-    .then(res => res.json())
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
+      return res.json();
+    })
     .then(data => {
       if (btn) btn.classList.remove('spinning');
 
-      // 1. Update dropdown options from TiDB Cloud
+      // 1. Update dropdown and modal inputs from TiDB Cloud
       if (data.available_objects) {
         populateObjectDropdown(data.available_objects, objectName);
       }
@@ -2532,6 +2565,12 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
           // Update HUD indicators
           document.getElementById('headerHeightProgress').textContent = `${matrixFromDb.length} / ${matrixFromDb.length}`;
           document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
+
+          // Update Quick Inputs
+          const qSteps = document.getElementById('inputTotalHeight');
+          if (qSteps) qSteps.value = matrixFromDb.length;
+          const qLoops = document.getElementById('inputTotalLoops');
+          if (qLoops) qLoops.value = APP_STATE.totalLoops;
 
           // Update KPI telemetry
           const avgCpsVal = totalCellCount > 0 ? (totalSumCps / totalCellCount).toFixed(1) : '0.0';

@@ -14,6 +14,12 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
+use App\Http\Controllers\MatrixController;
+
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+Route::get('/matrix/history', [MatrixController::class, 'getHistory']);
+Route::post('/matrix/save-session', [MatrixController::class, 'saveSession']);
+Route::get('/matrix/export-csv', [MatrixController::class, 'downloadCsv']);

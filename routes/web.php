@@ -40,12 +40,19 @@ Route::middleware('auth')->group(function () {
     // Matrix Scanner & Dashboard routes
     Route::get('/matrix', [MatrixController::class, 'index'])->name('matrix');
     Route::get('/dashboard', function() { return redirect()->route('matrix'); })->name('dashboard');
-    Route::get('/api/matrix/history', [MatrixController::class, 'getHistory'])->name('matrix.history');
-    Route::post('/api/matrix/save-session', [MatrixController::class, 'saveSession'])->name('matrix.save_session');
-    Route::get('/api/matrix/export-csv', [MatrixController::class, 'downloadCsv'])->name('matrix.export_csv');
     
     // User Profile
     Route::get('/profile', [ProfileController::class, 'show'])->name('profile');
     Route::post('/profile', [ProfileController::class, 'update'])->name('profile.update');
 });
+
+// Matrix Data Endpoints (accessible for Web Frontend & Raspberry Pi 5 / TiDB Cloud Sync)
+Route::get('/matrix-data/history', [MatrixController::class, 'getHistory'])->name('matrix.data.history');
+Route::post('/matrix-data/save-session', [MatrixController::class, 'saveSession'])->name('matrix.data.save_session');
+Route::get('/matrix-data/export-csv', [MatrixController::class, 'downloadCsv'])->name('matrix.data.export_csv');
+
+// API Aliases
+Route::get('/api/matrix/history', [MatrixController::class, 'getHistory'])->name('matrix.history');
+Route::post('/api/matrix/save-session', [MatrixController::class, 'saveSession'])->name('matrix.save_session');
+Route::get('/api/matrix/export-csv', [MatrixController::class, 'downloadCsv'])->name('matrix.export_csv');
 
