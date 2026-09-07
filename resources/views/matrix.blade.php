@@ -443,13 +443,10 @@
           <div class="kpi-subtext">Base Radiation</div>
         </div>
 
-        <div class="kpi-tile kpi-time" style="border-left:3px solid #F59E0B;">
-          <div class="kpi-header" style="color:#F59E0B;display:flex;align-items:center;gap:4px;">
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Last DB Record
-          </div>
-          <div class="kpi-number" id="metricLastTimestamp" style="font-size:13px;font-weight:700;color:#F8FAFC;font-family:var(--font-mono);line-height:1.2;margin:4px 0;">--:--:--</div>
-          <div class="kpi-subtext" id="metricLastTimestampSub" style="color:#10B981;font-weight:600;">TiDB Cloud Verified</div>
+        <div class="kpi-tile kpi-time">
+          <div class="kpi-header">Last DB Record</div>
+          <div class="kpi-number" id="metricLastTimestamp">--:--:--</div>
+          <div class="kpi-subtext" id="metricLastTimestampSub">TiDB Cloud Verified</div>
         </div>
       </div>
 
@@ -1797,14 +1794,42 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchInitialHistory();
 });
 
+function formatTimestampPretty(rawTime) {
+  if (!rawTime || rawTime === 'Memuat...' || rawTime === 'Belum ada data') return rawTime || '--:--:--';
+  
+  if (typeof rawTime === 'string') {
+    // If it contains T (e.g. 2026-09-07T02:48:50.941913Z)
+    if (rawTime.includes('T')) {
+      try {
+        const d = new Date(rawTime);
+        if (!isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0');
+          const YYYY = d.getFullYear();
+          const MM = pad(d.getMonth() + 1);
+          const DD = pad(d.getDate());
+          const hh = pad(d.getHours());
+          const mm = pad(d.getMinutes());
+          const ss = pad(d.getSeconds());
+          return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`;
+        }
+      } catch (e) {}
+      return rawTime.replace('T', ' ').split('.')[0].substring(0, 19);
+    }
+    // If already standard YYYY-MM-DD HH:MM:SS or similar
+    return rawTime.split('.')[0].substring(0, 19);
+  }
+  return String(rawTime);
+}
+
 function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
+  const formatted = formatTimestampPretty(timeStr);
   const elHeader = document.getElementById('headerLastSyncTime');
   const elBadge = document.getElementById('headerDbSourceBadge');
   const elKpi = document.getElementById('metricLastTimestamp');
   
-  if (elHeader && timeStr) elHeader.textContent = timeStr;
+  if (elHeader) elHeader.textContent = formatted;
   if (elBadge && sourceLabel) elBadge.textContent = sourceLabel;
-  if (elKpi && timeStr) elKpi.textContent = timeStr;
+  if (elKpi) elKpi.textContent = formatted;
 }
 
 function fetchInitialHistory() {
