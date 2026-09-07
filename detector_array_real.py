@@ -77,10 +77,11 @@ SLAVE_ID_XS2 = 0x02
 SLAVE_ID_XS3 = 0x03
 
 # Konfigurasi Firebase Realtime Database
+USE_FIREBASE = True
 FIREBASE_DATABASE_URL = "https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app"
 SERVICE_ACCOUNT_PATH = "serviceAccountKey.json"
-USE_FIREBASE = False
 
+HAS_FIREBASE_ADMIN_INIT = False
 if os.path.exists(SERVICE_ACCOUNT_PATH) and HAS_FIREBASE_ADMIN and firebase_admin is not None and credentials is not None:
     try:
         if not firebase_admin._apps:
@@ -88,17 +89,41 @@ if os.path.exists(SERVICE_ACCOUNT_PATH) and HAS_FIREBASE_ADMIN and firebase_admi
             firebase_admin.initialize_app(cred, {
                 'databaseURL': FIREBASE_DATABASE_URL
             })
-        USE_FIREBASE = True
-        print(f"[FIREBASE] Berhasil terhubung ke Firebase: {FIREBASE_DATABASE_URL}")
+        HAS_FIREBASE_ADMIN_INIT = True
+        print(f"[FIREBASE] Terhubung via Firebase Admin SDK ({SERVICE_ACCOUNT_PATH})")
     except Exception as e:
-        print(f"[FIREBASE WARNING] Gagal inisialisasi Firebase Admin: {e}")
-        USE_FIREBASE = False
-elif not HAS_FIREBASE_ADMIN:
-    print(f"[INFO] Modul 'firebase_admin' belum terpasang. Menjalankan mode logging database lokal & MySQL.")
+        print(f"[FIREBASE WARNING] Gagal inisialisasi Firebase Admin SDK: {e}. Menggunakan mode REST API.")
 else:
-    print(f"[INFO] '{SERVICE_ACCOUNT_PATH}' tidak ditemukan. Mode logging database lokal & MySQL aktif.")
+    print(f"[FIREBASE] Mode REST API aktif (Menghubungkan langsung ke {FIREBASE_DATABASE_URL})")
 
-# Konfigurasi Database Lokal & MySQL
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+def push_to_firebase(path, payload):
+    """Mengirim data ke Firebase Realtime Database via Admin SDK atau REST API."""
+    if not USE_FIREBASE:
+        return False
+    # Opsi 1: Admin SDK jika terinisialisasi
+    if HAS_FIREBASE_ADMIN_INIT and db is not None:
+        try:
+            db.reference(path).set(payload)
+            return True
+        except Exception as err:
+            pass
+    # Opsi 2: REST API (Universal untuk semua laptop / Raspberry Pi tanpa perlu serviceAccountKey.json)
+    if HAS_REQUESTS:
+        try:
+            url = f"{FIREBASE_DATABASE_URL.rstrip('/')}/{path.strip('/')}.json"
+            res = requests.put(url, json=payload, timeout=5)
+            return res.status_code == 200
+        except Exception as err:
+            print(f"   [Firebase Warning] Gagal kirim ke {path}: {err}")
+    return False
+
+# Konfigurasi Database Lokal & TiDB Cloud
 DATABASE_FILE = "arraydata.db"
 CSV_EXPORT_FILE = "heatmap_radiation_matrix.csv"
 DAT_EXPORT_FILE = "heatmap_radiation_matrix.dat"
@@ -269,7 +294,7 @@ def init_local_db():
 
 
 def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
-    """Menyimpan record hasil scan langsung ke database MySQL (phpMyAdmin)."""
+    """Menyimpan record hasil scan langsung ke database TiDB Cloud."""
     if not HAS_PYMYSQL or not USE_MYSQL:
         return
     try:
@@ -282,7 +307,7 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             database=MYSQL_DB,
             charset='utf8mb4',
             ssl=ssl_config,
-            connect_timeout=5
+            connect_timeout=10
         )
         with conn.cursor() as cursor:
             # Pastikan tabel ada
@@ -317,9 +342,9 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             ))
         conn.commit()
         conn.close()
-        print(f"   [MySQL phpMyAdmin] Berhasil disimpan ke MySQL ({MYSQL_HOST}/{MYSQL_DB})")
+        print(f"   [TiDB Cloud] Berhasil disimpan ke TiDB Cloud ({MYSQL_HOST}/{MYSQL_DB})")
     except Exception as err:
-        print(f"   [MySQL Warning] Gagal simpan ke MySQL: {err}")
+        print(f"   [TiDB Cloud Warning] Gagal simpan ke TiDB: {err}")
 
 
 # ==============================================================================
@@ -540,7 +565,7 @@ def run_real_hardware_scanning(
         )
         conn.commit()
 
-        # 4. Simpan ke MySQL (phpMyAdmin)
+        # 4. Simpan ke Database TiDB Cloud
         save_to_mysql(timestamp_str, height, d1, d2, d3, full_72_detector, max_cps, avg_cps)
 
         # 5. Push ke Firebase Realtime Database
@@ -549,7 +574,7 @@ def run_real_hardware_scanning(
                 est_3d = estimate_3d_source_position(matrix_heatmap)
 
                 # Update live status
-                db.reference('radiation_scans/latest').set({
+                push_to_firebase('radiation_scans/latest', {
                     'timestamp': timestamp_str,
                     'current_height': height,
                     'total_height': total_height,
@@ -565,7 +590,7 @@ def run_real_hardware_scanning(
                 })
 
                 # Update arsip level ketinggian
-                db.reference(f'radiation_scans/height_levels/level_{height}').set({
+                push_to_firebase(f'radiation_scans/height_levels/level_{height}', {
                     'timestamp': timestamp_str,
                     'height_level': height,
                     'full_72_array': full_72_detector,
@@ -574,7 +599,7 @@ def run_real_hardware_scanning(
                 })
 
                 # Update seluruh matriks akumulasi
-                db.reference('radiation_scans/matrix_data').set({
+                push_to_firebase('radiation_scans/matrix_data', {
                     'last_updated': timestamp_str,
                     'completed_heights': height,
                     'total_heights': total_height,

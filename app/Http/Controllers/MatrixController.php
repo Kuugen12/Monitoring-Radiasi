@@ -17,52 +17,66 @@ class MatrixController extends Controller
     }
 
     /**
-     * API: Get scan matrix records from SQLite / local store.
+     * API: Get scan matrix records from TiDB Cloud database (with SQLite fallback).
      */
     public function getHistory()
     {
-        $dbPath = base_path('arraydata.db');
-        if (!file_exists($dbPath)) {
+        $rows = [];
+        $source = 'tidb_cloud';
+
+        // 1. Prioritas Utama: Ambil langsung dari TiDB Cloud (MySQL Connection)
+        try {
+            $records = DB::table('scan_matrix')->orderBy('id', 'desc')->limit(50)->get();
+            if ($records->isNotEmpty()) {
+                $rows = $records->map(function ($item) {
+                    return (array) $item;
+                })->toArray();
+            }
+        } catch (\Exception $e) {
+            // 2. Fallback: Baca dari SQLite lokal jika koneksi TiDB offline
+            $dbPath = base_path('arraydata.db');
+            if (file_exists($dbPath)) {
+                try {
+                    $sqlite = new \PDO("sqlite:" . $dbPath);
+                    $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                    $stmt = $sqlite->query("SELECT * FROM scan_matrix ORDER BY id DESC LIMIT 50");
+                    $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+                    $source = 'sqlite_local';
+                } catch (\Exception $ex) {}
+            }
+        }
+
+        if (empty($rows)) {
             return response()->json([
                 'status' => 'empty',
+                'source' => $source,
                 'records' => [],
-                'message' => 'No local database found yet.'
+                'message' => 'Belum ada data scan di database.'
             ]);
         }
 
-        try {
-            $sqlite = new \PDO("sqlite:" . $dbPath);
-            $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-            $stmt = $sqlite->query("SELECT * FROM scan_matrix ORDER BY id DESC LIMIT 50");
-            $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-            // Parse json fields
-            foreach ($rows as &$row) {
-                if (!empty($row['detector_data'])) {
-                    $row['detector_data'] = json_decode($row['detector_data'], true);
-                }
-                if (!empty($row['xs1_data'])) {
-                    $row['xs1_data'] = json_decode($row['xs1_data'], true);
-                }
-                if (!empty($row['xs2_data'])) {
-                    $row['xs2_data'] = json_decode($row['xs2_data'], true);
-                }
-                if (!empty($row['xs3_data'])) {
-                    $row['xs3_data'] = json_decode($row['xs3_data'], true);
-                }
+        // Parse format JSON array untuk data detektor
+        foreach ($rows as &$row) {
+            if (!empty($row['detector_data']) && is_string($row['detector_data'])) {
+                $row['detector_data'] = json_decode($row['detector_data'], true);
             }
-
-            return response()->json([
-                'status' => 'success',
-                'total' => count($rows),
-                'records' => $rows
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ], 500);
+            if (!empty($row['xs1_data']) && is_string($row['xs1_data'])) {
+                $row['xs1_data'] = json_decode($row['xs1_data'], true);
+            }
+            if (!empty($row['xs2_data']) && is_string($row['xs2_data'])) {
+                $row['xs2_data'] = json_decode($row['xs2_data'], true);
+            }
+            if (!empty($row['xs3_data']) && is_string($row['xs3_data'])) {
+                $row['xs3_data'] = json_decode($row['xs3_data'], true);
+            }
         }
+
+        return response()->json([
+            'status' => 'success',
+            'source' => $source,
+            'total' => count($rows),
+            'records' => $rows
+        ]);
     }
 
     /**

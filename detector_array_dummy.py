@@ -42,10 +42,11 @@ DATABASE_FILE = "arraydata.db"
 CSV_EXPORT_FILE = "heatmap_radiation_matrix.csv"
 
 # Konfigurasi Firebase Realtime Database
-USE_FIREBASE = False
+USE_FIREBASE = True
 FIREBASE_DATABASE_URL = "https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app"
 SERVICE_ACCOUNT_PATH = "serviceAccountKey.json"
 
+HAS_FIREBASE_ADMIN_INIT = False
 if os.path.exists(SERVICE_ACCOUNT_PATH) and HAS_FIREBASE_ADMIN and firebase_admin is not None and credentials is not None:
     try:
         if not firebase_admin._apps:
@@ -53,17 +54,41 @@ if os.path.exists(SERVICE_ACCOUNT_PATH) and HAS_FIREBASE_ADMIN and firebase_admi
             firebase_admin.initialize_app(cred, {
                 'databaseURL': FIREBASE_DATABASE_URL
             })
-        USE_FIREBASE = True
-        print(f"[FIREBASE] Berhasil terhubung menggunakan {SERVICE_ACCOUNT_PATH}")
+        HAS_FIREBASE_ADMIN_INIT = True
+        print(f"[FIREBASE] Terhubung via Firebase Admin SDK ({SERVICE_ACCOUNT_PATH})")
     except Exception as e:
-        print(f"[FIREBASE WARNING] Gagal inisialisasi Firebase Admin: {e}")
-        USE_FIREBASE = False
-elif not HAS_FIREBASE_ADMIN:
-    print(f"[INFO] Modul 'firebase_admin' belum terpasang. Menjalankan mode logging database lokal & MySQL.")
+        print(f"[FIREBASE WARNING] Gagal inisialisasi Firebase Admin SDK: {e}. Menggunakan mode REST API.")
 else:
-    print(f"[INFO] '{SERVICE_ACCOUNT_PATH}' tidak ditemukan. Jalankan mode simulasi lokal.")
+    print(f"[FIREBASE] Mode REST API aktif (Menghubungkan langsung ke {FIREBASE_DATABASE_URL})")
 
-# Konfigurasi MySQL (TiDB Cloud Serverless)
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
+def push_to_firebase(path, payload):
+    """Mengirim data ke Firebase Realtime Database via Admin SDK atau REST API."""
+    if not USE_FIREBASE:
+        return False
+    # Opsi 1: Admin SDK jika terinisialisasi
+    if HAS_FIREBASE_ADMIN_INIT and db is not None:
+        try:
+            db.reference(path).set(payload)
+            return True
+        except Exception as err:
+            pass
+    # Opsi 2: REST API (Universal untuk semua laptop / Raspberry Pi tanpa perlu serviceAccountKey.json)
+    if HAS_REQUESTS:
+        try:
+            url = f"{FIREBASE_DATABASE_URL.rstrip('/')}/{path.strip('/')}.json"
+            res = requests.put(url, json=payload, timeout=5)
+            return res.status_code == 200
+        except Exception as err:
+            print(f"   [Firebase Warning] Gagal kirim ke {path}: {err}")
+    return False
+
+# Konfigurasi Database (TiDB Cloud Serverless)
 USE_MYSQL = True
 MYSQL_HOST = os.environ.get("MYSQL_HOST", "gateway01.ap-southeast-1.prod.aws.tidbcloud.com")
 MYSQL_PORT = int(os.environ.get("MYSQL_PORT", 4000))
@@ -79,7 +104,7 @@ except ImportError:
     HAS_PYMYSQL = False
 
 def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
-    """Menyimpan record hasil scan langsung ke MySQL (TiDB Cloud / phpMyAdmin)."""
+    """Menyimpan record hasil scan langsung ke TiDB Cloud."""
     if not HAS_PYMYSQL or not USE_MYSQL:
         return
     try:
@@ -92,9 +117,24 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             database=MYSQL_DB,
             charset='utf8mb4',
             ssl=ssl_config,
-            connect_timeout=5
+            connect_timeout=10
         )
         with conn.cursor() as cursor:
+            # Pastikan tabel scan_matrix ada
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS scan_matrix (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    timestamp VARCHAR(50),
+                    height_level INT,
+                    xs1_data TEXT,
+                    xs2_data TEXT,
+                    xs3_data TEXT,
+                    detector_data LONGTEXT,
+                    max_cps INT,
+                    avg_cps FLOAT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
             sql = """
                 INSERT INTO scan_matrix 
                 (timestamp, height_level, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
@@ -112,9 +152,9 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             ))
         conn.commit()
         conn.close()
-        print(f"   [MySQL phpMyAdmin] Berhasil simpan data level {height} ke {MYSQL_HOST}/{MYSQL_DB}")
+        print(f"   [TiDB Cloud] Berhasil simpan data level {height} ke TiDB Cloud ({MYSQL_DB})")
     except Exception as err:
-        print(f"   [MySQL phpMyAdmin Warning] Gagal simpan ke MySQL ({MYSQL_HOST}): {err}")
+        print(f"   [TiDB Cloud Warning] Gagal simpan ke TiDB ({MYSQL_HOST}): {err}")
 
 
 # ==========================================
@@ -230,18 +270,15 @@ def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="
     print("=" * 78)
 
     if USE_FIREBASE:
-        try:
-            db.reference('radiation_scans/hardware_config').set({
-                'port': port,
-                'baudrate': baud,
-                'protocol': 'modbus',
-                'total_height': total_height,
-                'sampling_interval_ms': int(delay * 1000),
-                'last_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            })
-            print(f"[FIREBASE] Hardware config (Port: {port}, Baud: {baud}) disinkronkan.")
-        except Exception as fb_err:
-            print(f"[FIREBASE WARNING] Gagal sinkronisasi hardware_config: {fb_err}")
+        push_to_firebase('radiation_scans/hardware_config', {
+            'port': port,
+            'baudrate': baud,
+            'protocol': 'modbus',
+            'total_height': total_height,
+            'sampling_interval_ms': int(delay * 1000),
+            'last_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        })
+        print(f"[FIREBASE] Hardware config (Port: {port}, Baud: {baud}) disinkronkan.")
 
     for height in range(1, total_height + 1):
         print(f"\n>>> [TINGGI SCAN: {height}/{total_height}] Request data Modbus RS485 (XS1, XS2, XS3)...")
@@ -289,7 +326,7 @@ def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="
         )
         conn.commit()
 
-        # 4. Simpan ke Database MySQL (phpMyAdmin di PC jika aktif)
+        # 4. Simpan ke Database TiDB Cloud Serverless
         save_to_mysql(timestamp_str, height, d1, d2, d3, full_72_detector, max_cps, avg_cps)
 
         # 5. Push ke Firebase Realtime Database
@@ -299,8 +336,7 @@ def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="
                 est_3d = estimate_3d_source_position(matrix_heatmap)
                 
                 # Push status tinggi saat ini
-                ref_latest = db.reference('radiation_scans/latest')
-                ref_latest.set({
+                push_to_firebase('radiation_scans/latest', {
                     'timestamp': timestamp_str,
                     'current_height': height,
                     'total_height': total_height,
@@ -316,8 +352,7 @@ def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="
                 })
 
                 # Push arsip per level tinggi
-                ref_height = db.reference(f'radiation_scans/height_levels/level_{height}')
-                ref_height.set({
+                push_to_firebase(f'radiation_scans/height_levels/level_{height}', {
                     'timestamp': timestamp_str,
                     'height_level': height,
                     'full_72_array': full_72_detector,
@@ -326,8 +361,7 @@ def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="
                 })
 
                 # Push keseluruhan matriks akumulasi
-                ref_matrix = db.reference('radiation_scans/matrix_data')
-                ref_matrix.set({
+                push_to_firebase('radiation_scans/matrix_data', {
                     'last_updated': timestamp_str,
                     'completed_heights': height,
                     'total_heights': total_height,

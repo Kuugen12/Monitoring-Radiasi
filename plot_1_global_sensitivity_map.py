@@ -8,19 +8,61 @@ Purpose: Plot 2D Global Spatial Sensitivity Map across X & Y coordinates (mm)
 
 import os
 import csv
-import numpy as np
-import matplotlib.pyplot as plt
+import numpy as np  # type: ignore
+import matplotlib.pyplot as plt  # type: ignore
 
 # ==============================================================================
 # 1. BAGIAN PENGAMBILAN DATA (DATA INTAKE SECTION)
-# Anda dapat mengganti fungsi ini dengan pembacaan sensor real dari Raspberry Pi 5
+# Mendukung: Firebase RTDB Cloud -> TiDB Cloud -> File CSV -> Simulasi Fallback
 # ==============================================================================
 def load_radiation_data(csv_path="heatmap_radiation_matrix.csv"):
     """
     Mengambil data matriks radiasi (N Baris x 72 Detektor).
-    Jika file CSV ditemukan, baca dari CSV.
-    Jika tidak, generate data dummy untuk simulasi.
+    Prioritas:
+      1. Ambil data terbaru dari Firebase Realtime Database
+      2. Ambil data dari TiDB Cloud (scan_matrix)
+      3. Baca dari file CSV lokal jika offline
+      4. Simulasi data jika tidak ada koneksi/file
     """
+    # 1. Coba ambil dari Firebase RTDB
+    try:
+        import requests
+        url = "https://magang-brin-27225-default-rtdb.asia-southeast1.firebasedatabase.app/radiation_scans/matrix_data.json"
+        res = requests.get(url, timeout=3)
+        if res.status_code == 200 and res.json():
+            matrix = res.json().get('matrix')
+            if matrix and len(matrix) > 0:
+                print(f"[DATA] Berhasil mengambil data live dari Firebase RTDB ({len(matrix)} level x {len(matrix[0])} detektor).")
+                return np.array(matrix)
+    except Exception:
+        pass
+
+    # 2. Coba ambil dari TiDB Cloud
+    try:
+        import pymysql
+        import json
+        conn = pymysql.connect(
+            host="gateway01.ap-southeast-1.prod.aws.tidbcloud.com",
+            port=4000,
+            user="4FxUazxpWaqzAS1.root",
+            password="Dq37CUJZIRiMM4QG",
+            database="magang",
+            ssl={'ssl_mode': 'REQUIRED'},
+            connect_timeout=3
+        )
+        with conn.cursor() as cur:
+            cur.execute("SELECT detector_data FROM scan_matrix ORDER BY id DESC LIMIT 10")
+            rows = cur.fetchall()
+            if rows:
+                matrix = [json.loads(r[0]) for r in reversed(rows)]
+                conn.close()
+                print(f"[DATA] Berhasil mengambil data dari TiDB Cloud ({len(matrix)} record scan).")
+                return np.array(matrix)
+        conn.close()
+    except Exception:
+        pass
+
+    # 3. Baca dari CSV
     if os.path.exists(csv_path):
         print(f"[DATA] Membaca data dari file: {csv_path}")
         rows = []
@@ -29,18 +71,15 @@ def load_radiation_data(csv_path="heatmap_radiation_matrix.csv"):
             headers = next(reader, None)
             for row in reader:
                 if row and len(row) > 1:
-                    # Lewati kolom index 'Tinggi_X'
                     values = [float(val) for val in row[1:] if val.strip()]
                     if values:
                         rows.append(values)
         if rows:
             return np.array(rows)
 
-    print("[DATA] CSV tidak ditemukan, menggunakan data simulasi 72-detektor...")
-    # Simulasi data 10 height steps x 72 channels dengan total counts ~4200
+    print("[DATA] Database & CSV tidak ditemukan, menggunakan data simulasi 72-detektor...")
     np.random.seed(42)
     base_data = np.random.uniform(35, 55, size=(10, 72))
-    # Hotspot anomali
     base_data[3:6, 32:42] += np.random.uniform(120, 280, size=(3, 10))
     return base_data
 
