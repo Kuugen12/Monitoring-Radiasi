@@ -281,6 +281,11 @@ def init_local_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
             height_level INTEGER,
+            object_name TEXT DEFAULT 'Gentong',
+            session_id TEXT,
+            loop_index INTEGER DEFAULT 1,
+            total_loops INTEGER DEFAULT 1,
+            transition_delay REAL DEFAULT 1.0,
             xs1_data TEXT,
             xs2_data TEXT,
             xs3_data TEXT,
@@ -293,7 +298,7 @@ def init_local_db():
     return conn
 
 
-def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
+def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps, object_name="Gentong", session_id=None, loop_index=1, total_loops=1, transition_delay=1.0):
     """Menyimpan record hasil scan langsung ke database TiDB Cloud."""
     if not HAS_PYMYSQL or not USE_MYSQL:
         return
@@ -316,6 +321,11 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     timestamp VARCHAR(50),
                     height_level INT,
+                    object_name VARCHAR(100) DEFAULT 'Gentong',
+                    session_id VARCHAR(64) DEFAULT NULL,
+                    loop_index INT DEFAULT 1,
+                    total_loops INT DEFAULT 1,
+                    transition_delay FLOAT DEFAULT 1.0,
                     xs1_data TEXT,
                     xs2_data TEXT,
                     xs3_data TEXT,
@@ -327,12 +337,17 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             """)
             sql = """
                 INSERT INTO scan_matrix 
-                (timestamp, height_level, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                (timestamp, height_level, object_name, session_id, loop_index, total_loops, transition_delay, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, (
                 timestamp_str,
                 height,
+                object_name,
+                session_id,
+                loop_index,
+                total_loops,
+                transition_delay,
                 json.dumps(d1),
                 json.dumps(d2),
                 json.dumps(d3),
@@ -342,7 +357,7 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
             ))
         conn.commit()
         conn.close()
-        print(f"   [TiDB Cloud] Berhasil disimpan ke TiDB Cloud ({MYSQL_HOST}/{MYSQL_DB})")
+        print(f"   [TiDB Cloud] Berhasil disimpan [{object_name}] Level {height} (Loop {loop_index}/{total_loops}) ke TiDB Cloud")
     except Exception as err:
         print(f"   [TiDB Cloud Warning] Gagal simpan ke TiDB: {err}")
 
@@ -441,15 +456,20 @@ def run_real_hardware_scanning(
     total_height=TOTAL_HEIGHT_SCAN,
     sampling_delay=1.0,
     scan_mode="auto",
-    protocol="modbus"
+    protocol="modbus",
+    object_name="Gentong",
+    total_loops=1,
+    transition_delay=1.0
 ):
     """
     Fungsi utama untuk menjalankan akuisisi data dari 72-channel sensor nyata.
     """
+    session_id = f"SES_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{random.randint(100, 999)}"
     print("=" * 82)
     print("  RADIOSCAN MATRIX - GATEWAY AKUISISI DETEKTOR FISIK 72-CHANNEL")
+    print(f"  Objek Target: {object_name} | Session ID: {session_id}")
     print(f"  Port Serial: {port_name} | Baudrate: {baud_rate} | Protokol: {protocol.upper()}")
-    print(f"  Target Scan: {total_height} Level Ketinggian | Mode: {scan_mode.upper()}")
+    print(f"  Target Scan: {total_height} Level | Loops/Baris: {total_loops} | Delay Transisi: {transition_delay}s")
     print(f"  Firebase Sync: {'AKTIF' if USE_FIREBASE else 'NON-AKTIF'}")
     print("=" * 82)
 
@@ -460,11 +480,15 @@ def run_real_hardware_scanning(
                 'port': port_name,
                 'baudrate': baud_rate,
                 'protocol': protocol,
+                'object_name': object_name,
+                'session_id': session_id,
                 'total_height': total_height,
+                'total_loops': total_loops,
+                'transition_delay': transition_delay,
                 'sampling_interval_ms': int(sampling_delay * 1000),
                 'last_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
-            print(f"[FIREBASE] Konfigurasi port {port_name} & baudrate {baud_rate} disinkronkan ke Web Dashboard.")
+            print(f"[FIREBASE] Konfigurasi (Objek: {object_name}, Port: {port_name}) disinkronkan ke Web.")
         except Exception as fb_err:
             print(f"[FIREBASE WARNING] Gagal sinkronisasi hardware_config: {fb_err}")
 
@@ -500,118 +524,143 @@ def run_real_hardware_scanning(
     print("\n[INFO] Mulai pemindaian matriks radiasi 72 detektor...\n")
 
     for height in range(1, total_height + 1):
-        if scan_mode == "step":
-            input(f">>> Tekan [ENTER] setelah memposisikan detektor pada Level Ketinggian {height}/{total_height}...")
-        else:
-            print(f"\n>>> [LEVEL KETINGGIAN {height}/{total_height}] Mengambil data 72 detektor...")
-
-        # 1. Baca data dari Modul 1 (XS1: D01-D24)
-        d1 = None
-        d2 = None
-        d3 = None
-
-        if ser and ser.is_open:
-            if protocol == "modbus":
-                d1 = read_modbus_rtu_module(ser, SLAVE_ID_XS1, DETECTORS_PER_MODULE)
-                time.sleep(0.05)  # Jeda pergantian slave di RS485 bus
-                d2 = read_modbus_rtu_module(ser, SLAVE_ID_XS2, DETECTORS_PER_MODULE)
-                time.sleep(0.05)
-                d3 = read_modbus_rtu_module(ser, SLAVE_ID_XS3, DETECTORS_PER_MODULE)
+        for loop_idx in range(1, total_loops + 1):
+            if scan_mode == "step":
+                input(f">>> Tekan [ENTER] setelah memposisikan detektor pada Level {height}/{total_height} (Loop {loop_idx}/{total_loops})...")
             else:
-                d1 = read_serial_ascii_module(ser, module_id=1)
-                d2 = read_serial_ascii_module(ser, module_id=2)
-                d3 = read_serial_ascii_module(ser, module_id=3)
+                print(f"\n>>> [TINGGI {height}/{total_height} | LOOP {loop_idx}/{total_loops}] Objek '{object_name}' - Mengambil data 72 detektor...")
 
-        # Fallback protektif jika paket modul hilang / hardware disconnect
-        if not d1 or len(d1) != DETECTORS_PER_MODULE:
-            print(f"   [Peringatan] Modul 1 (XS1) tidak merespons, menggunakan baseline...")
-            d1 = [25] * DETECTORS_PER_MODULE
-        if not d2 or len(d2) != DETECTORS_PER_MODULE:
-            print(f"   [Peringatan] Modul 2 (XS2) tidak merespons, menggunakan baseline...")
-            d2 = [25] * DETECTORS_PER_MODULE
-        if not d3 or len(d3) != DETECTORS_PER_MODULE:
-            print(f"   [Peringatan] Modul 3 (XS3) tidak merespons, menggunakan baseline...")
-            d3 = [25] * DETECTORS_PER_MODULE
+            # 1. Baca data dari Modul 1 (XS1: D01-D24)
+            d1 = None
+            d2 = None
+            d3 = None
 
-        # 2. Gabungkan menjadi 72 detektor lengkap
-        full_72_detector = d1 + d2 + d3
-        matrix_heatmap.append(full_72_detector)
+            if ser and ser.is_open:
+                if protocol == "modbus":
+                    d1 = read_modbus_rtu_module(ser, SLAVE_ID_XS1, DETECTORS_PER_MODULE)
+                    time.sleep(0.05)  # Jeda pergantian slave di RS485 bus
+                    d2 = read_modbus_rtu_module(ser, SLAVE_ID_XS2, DETECTORS_PER_MODULE)
+                    time.sleep(0.05)
+                    d3 = read_modbus_rtu_module(ser, SLAVE_ID_XS3, DETECTORS_PER_MODULE)
+                else:
+                    d1 = read_serial_ascii_module(ser, module_id=1)
+                    d2 = read_serial_ascii_module(ser, module_id=2)
+                    d3 = read_serial_ascii_module(ser, module_id=3)
 
-        timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        max_cps = max(full_72_detector)
-        avg_cps = sum(full_72_detector) / len(full_72_detector)
-        max_ch_idx = full_72_detector.index(max_cps) + 1
-        max_ch_label = f"D{max_ch_idx:02d}"
+            # Fallback protektif jika paket modul hilang / hardware disconnect
+            if not d1 or len(d1) != DETECTORS_PER_MODULE:
+                print(f"   [Peringatan] Modul 1 (XS1) tidak merespons, menggunakan baseline...")
+                d1 = [25] * DETECTORS_PER_MODULE
+            if not d2 or len(d2) != DETECTORS_PER_MODULE:
+                print(f"   [Peringatan] Modul 2 (XS2) tidak merespons, menggunakan baseline...")
+                d2 = [25] * DETECTORS_PER_MODULE
+            if not d3 or len(d3) != DETECTORS_PER_MODULE:
+                print(f"   [Peringatan] Modul 3 (XS3) tidak merespons, menggunakan baseline...")
+                d3 = [25] * DETECTORS_PER_MODULE
 
-        status_tag = "[ALERT HOTSPOT]" if max_cps > 100 else "[NORMAL]"
-        print(f"[{timestamp_str}] Level {height:02d} | Status: {status_tag} | Max: {max_cps:3d} CPS ({max_ch_label}) | Avg: {avg_cps:.1f} CPS")
-        print_terminal_heatmap(full_72_detector, max_cps)
+            # 2. Gabungkan menjadi 72 detektor lengkap
+            full_72_detector = d1 + d2 + d3
+            if len(matrix_heatmap) < height:
+                matrix_heatmap.append(full_72_detector)
+            else:
+                matrix_heatmap[height - 1] = full_72_detector
 
-        # 3. Simpan ke SQLite Lokal
-        cursor.execute(
-            """INSERT INTO scan_matrix 
-               (timestamp, height_level, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                timestamp_str,
-                height,
-                json.dumps(d1),
-                json.dumps(d2),
-                json.dumps(d3),
-                json.dumps(full_72_detector),
-                max_cps,
-                avg_cps
+            timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            max_cps = max(full_72_detector)
+            avg_cps = sum(full_72_detector) / len(full_72_detector)
+            max_ch_idx = full_72_detector.index(max_cps) + 1
+            max_ch_label = f"D{max_ch_idx:02d}"
+
+            status_tag = "[ALERT HOTSPOT]" if max_cps > 100 else "[NORMAL]"
+            print(f"[{timestamp_str}] Tinggi {height:02d} (Loop {loop_idx}/{total_loops}) | Status: {status_tag} | Max: {max_cps:3d} CPS ({max_ch_label}) | Avg: {avg_cps:.1f} CPS")
+            print_terminal_heatmap(full_72_detector, max_cps)
+
+            # 3. Simpan ke SQLite Lokal
+            cursor.execute(
+                """INSERT INTO scan_matrix 
+                   (timestamp, height_level, object_name, session_id, loop_index, total_loops, transition_delay, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    timestamp_str,
+                    height,
+                    object_name,
+                    session_id,
+                    loop_idx,
+                    total_loops,
+                    transition_delay,
+                    json.dumps(d1),
+                    json.dumps(d2),
+                    json.dumps(d3),
+                    json.dumps(full_72_detector),
+                    max_cps,
+                    avg_cps
+                )
             )
-        )
-        conn.commit()
+            conn.commit()
 
-        # 4. Simpan ke Database TiDB Cloud
-        save_to_mysql(timestamp_str, height, d1, d2, d3, full_72_detector, max_cps, avg_cps)
+            # 4. Simpan ke Database TiDB Cloud
+            save_to_mysql(timestamp_str, height, d1, d2, d3, full_72_detector, max_cps, avg_cps,
+                          object_name=object_name, session_id=session_id, loop_index=loop_idx,
+                          total_loops=total_loops, transition_delay=transition_delay)
 
-        # 5. Push ke Firebase Realtime Database
-        if USE_FIREBASE:
-            try:
-                est_3d = estimate_3d_source_position(matrix_heatmap)
+            # 5. Push ke Firebase Realtime Database
+            if USE_FIREBASE:
+                try:
+                    est_3d = estimate_3d_source_position(matrix_heatmap)
 
-                # Update live status
-                push_to_firebase('radiation_scans/latest', {
-                    'timestamp': timestamp_str,
-                    'current_height': height,
-                    'total_height': total_height,
-                    'xs1_data': d1,
-                    'xs2_data': d2,
-                    'xs3_data': d3,
-                    'full_72_array': full_72_detector,
-                    'max_cps': max_cps,
-                    'max_channel': max_ch_label,
-                    'avg_cps': round(avg_cps, 2),
-                    'status': 'alert' if max_cps > 100 else 'safe',
-                    'estimated_source_3d': est_3d
-                })
+                    # Update live status
+                    push_to_firebase('radiation_scans/latest', {
+                        'timestamp': timestamp_str,
+                        'object_name': object_name,
+                        'session_id': session_id,
+                        'current_height': height,
+                        'total_height': total_height,
+                        'current_loop': loop_idx,
+                        'total_loops': total_loops,
+                        'transition_delay': transition_delay,
+                        'xs1_data': d1,
+                        'xs2_data': d2,
+                        'xs3_data': d3,
+                        'full_72_array': full_72_detector,
+                        'max_cps': max_cps,
+                        'max_channel': max_ch_label,
+                        'avg_cps': round(avg_cps, 2),
+                        'status': 'alert' if max_cps > 100 else 'safe',
+                        'estimated_source_3d': est_3d
+                    })
 
-                # Update arsip level ketinggian
-                push_to_firebase(f'radiation_scans/height_levels/level_{height}', {
-                    'timestamp': timestamp_str,
-                    'height_level': height,
-                    'full_72_array': full_72_detector,
-                    'max_cps': max_cps,
-                    'avg_cps': round(avg_cps, 2)
-                })
+                    # Update arsip level ketinggian
+                    push_to_firebase(f'radiation_scans/height_levels/level_{height}', {
+                        'timestamp': timestamp_str,
+                        'object_name': object_name,
+                        'height_level': height,
+                        'loop_index': loop_idx,
+                        'full_72_array': full_72_detector,
+                        'max_cps': max_cps,
+                        'avg_cps': round(avg_cps, 2)
+                    })
 
-                # Update seluruh matriks akumulasi
-                push_to_firebase('radiation_scans/matrix_data', {
-                    'last_updated': timestamp_str,
-                    'completed_heights': height,
-                    'total_heights': total_height,
-                    'matrix': matrix_heatmap
-                })
-                print(f"   [Firebase Sync] Berhasil sinkronisasi level_{height} ke Web.")
-            except Exception as fb_err:
-                print(f"   [Firebase Sync Error] {fb_err}")
+                    # Update seluruh matriks akumulasi
+                    push_to_firebase('radiation_scans/matrix_data', {
+                        'last_updated': timestamp_str,
+                        'object_name': object_name,
+                        'session_id': session_id,
+                        'completed_heights': height,
+                        'total_heights': total_height,
+                        'matrix': matrix_heatmap
+                    })
+                    print(f"   [Firebase Sync] Berhasil sinkronisasi level_{height} (Loop {loop_idx}) ke Web.")
+                except Exception as fb_err:
+                    print(f"   [Firebase Sync Error] {fb_err}")
 
-        # Jeda waktu sebelum scan step berikutnya
-        if scan_mode == "auto":
-            time.sleep(sampling_delay)
+            # Jeda sampling waktu dalam loop
+            if scan_mode == "auto":
+                time.sleep(sampling_delay)
+
+        # Jeda transisi antar level ketinggian
+        if height < total_height and transition_delay > 0:
+            print(f"--> Selesai Baris {height}. Transisi lift ke Baris {height + 1}... Delay: {transition_delay}s")
+            time.sleep(transition_delay)
 
     # Tutup port serial
     if ser and ser.is_open:
@@ -643,11 +692,11 @@ def run_real_hardware_scanning(
     est_final = estimate_3d_source_position(matrix_heatmap)
 
     print("\n" + "=" * 82)
-    print(" PEMINDAIAN DATA HARDWARE FISIK SELESAI DENGAN SUKSES!")
-    print(f" 1. Database SQLite : {DATABASE_FILE} ({total_height} records)")
-    print(f" 2. File Matrix CSV : {CSV_EXPORT_FILE} ({total_height} baris x {TOTAL_DETECTORS} kolom)")
-    print(f" 3. File Matrix DAT : {DAT_EXPORT_FILE}")
-    print(f" 4. Estimasi Sumber : X={est_final['x']} cm, Y={est_final['y']} cm, Z={est_final['z']} cm (Akurasi: {est_final['confidence']}%)")
+    print(f" PEMINDAIAN DATA HARDWARE FISIK OBJEK '{object_name}' SELESAI DENGAN SUKSES!")
+    print(f" 1. Database TiDB / SQLite : scan_matrix (Objek: {object_name}, Session: {session_id})")
+    print(f" 2. File Matrix CSV        : {CSV_EXPORT_FILE} ({total_height} baris x {TOTAL_DETECTORS} kolom)")
+    print(f" 3. File Matrix DAT        : {DAT_EXPORT_FILE}")
+    print(f" 4. Estimasi Sumber 3D     : X={est_final['x']} cm, Y={est_final['y']} cm, Z={est_final['z']} cm (Akurasi: {est_final['confidence']}%)")
     print("=" * 82)
 
 
@@ -657,6 +706,24 @@ def run_real_hardware_scanning(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Radioscan Matrix v2.0 - Gateway Akuisisi Detektor Radiasi Nyata 72-Channel"
+    )
+    parser.add_argument(
+        "--object-name", "-o",
+        type=str,
+        default="Gentong",
+        help="Nama/Identitas Objek yang di-scan (Default: Gentong)"
+    )
+    parser.add_argument(
+        "--loops", "-l",
+        type=int,
+        default=1,
+        help="Jumlah loop pemindaian per baris/blok (Default: 1)"
+    )
+    parser.add_argument(
+        "--transition-delay", "-t",
+        type=float,
+        default=1.0,
+        help="Lama delay perpindahan baris dalam detik (Default: 1.0)"
     )
     parser.add_argument(
         "--port", "-p",
@@ -697,7 +764,7 @@ if __name__ == "__main__":
         help="Protokol komunikasi: 'modbus' (Modbus RTU RS-485) atau 'ascii' (Serial JSON/CSV)"
     )
     parser.add_argument(
-        "--list-ports", "-l",
+        "--list-ports", "-lports",
         action="store_true",
         help="Tampilkan semua port COM/Serial yang terdeteksi lalu keluar"
     )
@@ -723,5 +790,9 @@ if __name__ == "__main__":
         total_height=args.steps,
         sampling_delay=args.delay,
         scan_mode=args.mode,
-        protocol=args.protocol
+        protocol=args.protocol,
+        object_name=args.object_name,
+        total_loops=args.loops,
+        transition_delay=args.transition_delay
     )
+
