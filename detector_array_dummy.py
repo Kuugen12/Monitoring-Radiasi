@@ -103,7 +103,7 @@ try:
 except ImportError:
     HAS_PYMYSQL = False
 
-def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps, object_name="Gentong", session_id=None, loop_index=1, total_loops=1, transition_delay=1.0):
+def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps):
     """Menyimpan record hasil scan langsung ke TiDB Cloud."""
     if not HAS_PYMYSQL or not USE_MYSQL:
         return
@@ -126,11 +126,6 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps, 
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     timestamp VARCHAR(50),
                     height_level INT,
-                    object_name VARCHAR(100) DEFAULT 'Gentong',
-                    session_id VARCHAR(64) DEFAULT NULL,
-                    loop_index INT DEFAULT 1,
-                    total_loops INT DEFAULT 1,
-                    transition_delay FLOAT DEFAULT 1.0,
                     xs1_data TEXT,
                     xs2_data TEXT,
                     xs3_data TEXT,
@@ -142,17 +137,12 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps, 
             """)
             sql = """
                 INSERT INTO scan_matrix 
-                (timestamp, height_level, object_name, session_id, loop_index, total_loops, transition_delay, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (timestamp, height_level, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """
             cursor.execute(sql, (
                 timestamp_str,
                 height,
-                object_name,
-                session_id,
-                loop_index,
-                total_loops,
-                transition_delay,
                 json.dumps(d1),
                 json.dumps(d2),
                 json.dumps(d3),
@@ -162,7 +152,7 @@ def save_to_mysql(timestamp_str, height, d1, d2, d3, full_72, max_cps, avg_cps, 
             ))
         conn.commit()
         conn.close()
-        print(f"   [TiDB Cloud] Berhasil simpan [{object_name}] Level {height} (Loop {loop_index}/{total_loops}) ke TiDB Cloud")
+        print(f"   [TiDB Cloud] Berhasil simpan data level {height} ke TiDB Cloud ({MYSQL_DB})")
     except Exception as err:
         print(f"   [TiDB Cloud Warning] Gagal simpan ke TiDB ({MYSQL_HOST}): {err}")
 
@@ -179,11 +169,6 @@ def init_local_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp TEXT,
             height_level INTEGER,
-            object_name TEXT DEFAULT 'Gentong',
-            session_id TEXT,
-            loop_index INTEGER DEFAULT 1,
-            total_loops INTEGER DEFAULT 1,
-            transition_delay REAL DEFAULT 1.0,
             xs1_data TEXT,
             xs2_data TEXT,
             xs3_data TEXT,
@@ -208,7 +193,7 @@ def generate_xiao_seed_data(module_id, is_hotspot=False, height=1):
     readings = []
     
     for ch in range(TOTAL_DETECTORS_PER_MODULE):
-        # Base background radiation: 18 - 42 CPS
+        # Base background radiation: 15 - 45 CPS
         base_cps = random.randint(18, 42) + random.randint(-3, 3)
         
         # Simulasi titik anomali radiasi (Hotspot Gaussian di sekitar D34-D42 pada height 4-6)
@@ -273,25 +258,14 @@ def estimate_3d_source_position(matrix_heatmap):
 # ==========================================
 # 5. MAIN SCANNING LOOP
 # ==========================================
-def run_scanning(
-    total_height=TOTAL_HEIGHT_SCAN, 
-    delay=SAMPLING_INTERVAL, 
-    port="COM5", 
-    baud=115200, 
-    object_name="Gentong", 
-    total_loops=1, 
-    transition_delay=1.0
-):
+def run_scanning(total_height=TOTAL_HEIGHT_SCAN, delay=SAMPLING_INTERVAL, port="COM5", baud=115200):
     conn = init_local_db()
     cursor = conn.cursor()
     
-    session_id = f"SES_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{random.randint(100, 999)}"
     matrix_heatmap = []
     print("=" * 78)
     print("  RADIOSCAN MATRIX - 72-CH RADIATION ARRAY DETECTOR (SIMULATION)")
-    print(f"  Objek Target: {object_name} | Session ID: {session_id}")
-    print(f"  Port: {port} | Baud: {baud} | Total Steps: {total_height} | Loops/Baris: {total_loops}")
-    print(f"  Delay Transisi Antar Baris: {transition_delay}s | Interval Sampling: {delay}s")
+    print(f"  Port: {port} | Baud: {baud} | Total Steps: {total_height} | Detektor: 72")
     print(f"  Firebase Sync: {'AKTIF' if USE_FIREBASE else 'NON-AKTIF (Simulasi Lokal)'}")
     print("=" * 78)
 
@@ -300,135 +274,105 @@ def run_scanning(
             'port': port,
             'baudrate': baud,
             'protocol': 'modbus',
-            'object_name': object_name,
-            'session_id': session_id,
             'total_height': total_height,
-            'total_loops': total_loops,
-            'transition_delay': transition_delay,
             'sampling_interval_ms': int(delay * 1000),
             'last_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
-        print(f"[FIREBASE] Hardware config (Objek: {object_name}, Port: {port}) disinkronkan.")
+        print(f"[FIREBASE] Hardware config (Port: {port}, Baud: {baud}) disinkronkan.")
 
     for height in range(1, total_height + 1):
-        for loop_idx in range(1, total_loops + 1):
-            print(f"\n>>> [TINGGI: {height}/{total_height} | LOOP: {loop_idx}/{total_loops}] Objek: '{object_name}' - Request data Modbus...")
-            
-            # Simulasi kemunculan anomali hotspot pada tinggi 4, 5, dan 6
-            has_anomaly = (height in [4, 5, 6])
-            
-            # 1. Mengambil data 24-channel dari masing-masing Xiao Seed
-            d1 = generate_xiao_seed_data(module_id=1, is_hotspot=has_anomaly, height=height)
-            d2 = generate_xiao_seed_data(module_id=2, is_hotspot=has_anomaly, height=height)
-            d3 = generate_xiao_seed_data(module_id=3, is_hotspot=has_anomaly, height=height)
-            
-            # 2. Merge d1, d2, d3 menjadi 72 detektor
-            full_72_detector = d1 + d2 + d3
-            
-            # Update matrix heatmap representation (simpan iterasi terakhir per baris)
-            if len(matrix_heatmap) < height:
-                matrix_heatmap.append(full_72_detector)
-            else:
-                matrix_heatmap[height - 1] = full_72_detector
-            
-            timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            max_cps = max(full_72_detector)
-            avg_cps = sum(full_72_detector) / len(full_72_detector)
-            max_ch = full_72_detector.index(max_cps) + 1
-            
-            # Status log
-            status_tag = "[ALERT HOTSPOT]" if max_cps > 100 else "[NORMAL]"
-            print(f"[{timestamp_str}] Tinggi {height:2d} (Loop {loop_idx}/{total_loops}) | XS1: 24ch, XS2: 24ch, XS3: 24ch -> 72ch")
-            print(f"   Status: {status_tag} | Max: {max_cps:3d} CPS (D{max_ch:02d}) | Avg: {avg_cps:.1f} CPS")
-            print(f"   Sample D01-D06 : {full_72_detector[:6]}")
-            print(f"   Sample D33-D38 : {full_72_detector[32:38]}")
-            print(f"   Sample D67-D72 : {full_72_detector[-6:]}")
+        print(f"\n>>> [TINGGI SCAN: {height}/{total_height}] Request data Modbus RS485 (XS1, XS2, XS3)...")
+        
+        # Simulasi kemunculan anomali hotspot pada tinggi 4, 5, dan 6
+        has_anomaly = (height in [4, 5, 6])
+        
+        # 1. Mengambil data 24-channel dari masing-masing Xiao Seed
+        d1 = generate_xiao_seed_data(module_id=1, is_hotspot=has_anomaly, height=height)
+        d2 = generate_xiao_seed_data(module_id=2, is_hotspot=has_anomaly, height=height)
+        d3 = generate_xiao_seed_data(module_id=3, is_hotspot=has_anomaly, height=height)
+        
+        # 2. Merge d1, d2, d3 menjadi 72 detektor
+        full_72_detector = d1 + d2 + d3
+        matrix_heatmap.append(full_72_detector)
+        
+        timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        max_cps = max(full_72_detector)
+        avg_cps = sum(full_72_detector) / len(full_72_detector)
+        max_ch = full_72_detector.index(max_cps) + 1
+        
+        # Status log
+        status_tag = "[ALERT HOTSPOT]" if max_cps > 100 else "[NORMAL]"
+        print(f"[{timestamp_str}] Tinggi {height:2d} | XS1: {len(d1)}ch, XS2: {len(d2)}ch, XS3: {len(d3)}ch -> Total 72ch")
+        print(f"   Status: {status_tag} | Max: {max_cps:3d} CPS (D{max_ch:02d}) | Avg: {avg_cps:.1f} CPS")
+        print(f"   Sample D01-D06 : {full_72_detector[:6]}")
+        print(f"   Sample D33-D38 : {full_72_detector[32:38]}")
+        print(f"   Sample D67-D72 : {full_72_detector[-6:]}")
 
-            # 3. Simpan ke Database Lokal SQLite
-            cursor.execute(
-                """INSERT INTO scan_matrix 
-                   (timestamp, height_level, object_name, session_id, loop_index, total_loops, transition_delay, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    timestamp_str,
-                    height,
-                    object_name,
-                    session_id,
-                    loop_idx,
-                    total_loops,
-                    transition_delay,
-                    json.dumps(d1),
-                    json.dumps(d2),
-                    json.dumps(d3),
-                    json.dumps(full_72_detector),
-                    max_cps,
-                    avg_cps
-                )
+        # 3. Simpan ke Database Lokal SQLite
+        cursor.execute(
+            """INSERT INTO scan_matrix 
+               (timestamp, height_level, xs1_data, xs2_data, xs3_data, detector_data, max_cps, avg_cps) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                timestamp_str,
+                height,
+                json.dumps(d1),
+                json.dumps(d2),
+                json.dumps(d3),
+                json.dumps(full_72_detector),
+                max_cps,
+                avg_cps
             )
-            conn.commit()
+        )
+        conn.commit()
 
-            # 4. Simpan ke Database TiDB Cloud Serverless
-            save_to_mysql(timestamp_str, height, d1, d2, d3, full_72_detector, max_cps, avg_cps, 
-                          object_name=object_name, session_id=session_id, loop_index=loop_idx, 
-                          total_loops=total_loops, transition_delay=transition_delay)
+        # 4. Simpan ke Database TiDB Cloud Serverless
+        save_to_mysql(timestamp_str, height, d1, d2, d3, full_72_detector, max_cps, avg_cps)
 
-            # 5. Push ke Firebase Realtime Database
-            if USE_FIREBASE:
-                try:
-                    # Estimasi 3D real-time
-                    est_3d = estimate_3d_source_position(matrix_heatmap)
-                    
-                    # Push status tinggi saat ini
-                    push_to_firebase('radiation_scans/latest', {
-                        'timestamp': timestamp_str,
-                        'object_name': object_name,
-                        'session_id': session_id,
-                        'current_height': height,
-                        'total_height': total_height,
-                        'current_loop': loop_idx,
-                        'total_loops': total_loops,
-                        'transition_delay': transition_delay,
-                        'xs1_data': d1,
-                        'xs2_data': d2,
-                        'xs3_data': d3,
-                        'full_72_array': full_72_detector,
-                        'max_cps': max_cps,
-                        'max_channel': f"D{max_ch:02d}",
-                        'avg_cps': round(avg_cps, 2),
-                        'status': 'alert' if max_cps > 100 else 'safe',
-                        'estimated_source_3d': est_3d
-                    })
+        # 5. Push ke Firebase Realtime Database
+        if USE_FIREBASE:
+            try:
+                # Estimasi 3D real-time
+                est_3d = estimate_3d_source_position(matrix_heatmap)
+                
+                # Push status tinggi saat ini
+                push_to_firebase('radiation_scans/latest', {
+                    'timestamp': timestamp_str,
+                    'current_height': height,
+                    'total_height': total_height,
+                    'xs1_data': d1,
+                    'xs2_data': d2,
+                    'xs3_data': d3,
+                    'full_72_array': full_72_detector,
+                    'max_cps': max_cps,
+                    'max_channel': f"D{max_ch:02d}",
+                    'avg_cps': round(avg_cps, 2),
+                    'status': 'alert' if max_cps > 100 else 'safe',
+                    'estimated_source_3d': est_3d
+                })
 
-                    # Push arsip per level tinggi
-                    push_to_firebase(f'radiation_scans/height_levels/level_{height}', {
-                        'timestamp': timestamp_str,
-                        'object_name': object_name,
-                        'height_level': height,
-                        'loop_index': loop_idx,
-                        'full_72_array': full_72_detector,
-                        'max_cps': max_cps,
-                        'avg_cps': round(avg_cps, 2)
-                    })
+                # Push arsip per level tinggi
+                push_to_firebase(f'radiation_scans/height_levels/level_{height}', {
+                    'timestamp': timestamp_str,
+                    'height_level': height,
+                    'full_72_array': full_72_detector,
+                    'max_cps': max_cps,
+                    'avg_cps': round(avg_cps, 2)
+                })
 
-                    # Push keseluruhan matriks akumulasi
-                    push_to_firebase('radiation_scans/matrix_data', {
-                        'last_updated': timestamp_str,
-                        'object_name': object_name,
-                        'session_id': session_id,
-                        'completed_heights': height,
-                        'total_heights': total_height,
-                        'matrix': matrix_heatmap
-                    })
-                except Exception as fb_err:
-                    print(f"   [Firebase Sync Error] {fb_err}")
+                # Push keseluruhan matriks akumulasi
+                push_to_firebase('radiation_scans/matrix_data', {
+                    'last_updated': timestamp_str,
+                    'completed_heights': height,
+                    'total_heights': total_height,
+                    'matrix': matrix_heatmap
+                })
+                print(f"   [Firebase Sync] OK -> level_{height} & matrix_data synced.")
+            except Exception as fb_err:
+                print(f"   [Firebase Sync Error] {fb_err}")
 
-            # Jeda sampling waktu dalam loop
-            time.sleep(delay)
-
-        # Jeda perpindahan baris (Transition Delay) jika masih ada baris berikutnya
-        if height < total_height and transition_delay > 0:
-            print(f"--> Selesai Baris {height}. Transisi lift ke Baris {height + 1}... Delay: {transition_delay}s")
-            time.sleep(transition_delay)
+        # Jeda waktu antar height step
+        time.sleep(delay)
 
     # ==========================================
     # 6. EXPORT KE FILE CSV & DAT (MATRIX FORMAT)
@@ -459,11 +403,11 @@ def run_scanning(
     est_final = estimate_3d_source_position(matrix_heatmap)
 
     print("\n" + "=" * 78)
-    print(f" SCAN ARRAY DETEKTOR UNTUK OBJEK '{object_name}' SELESAI DENGAN SUKSES!")
-    print(f" 1. Database TiDB / SQLite : scan_matrix (Objek: {object_name}, Session: {session_id})")
-    print(f" 2. Matrix CSV             : {CSV_EXPORT_FILE} ({total_height} Rows x {TOTAL_DETECTORS} Columns)")
-    print(f" 3. Matrix DAT             : {dat_filename}")
-    print(f" 4. Estimasi Sumber 3D     : X={est_final['x']}cm, Y={est_final['y']}cm, Z={est_final['z']}cm (Conf: {est_final['confidence']}%)")
+    print(" SCAN ARRAY DETEKTOR SELESAI DENGAN SUKSES!")
+    print(f" 1. Database SQLite : {DATABASE_FILE} (Tabel: scan_matrix, Total Records: {total_height})")
+    print(f" 2. Matrix CSV      : {CSV_EXPORT_FILE} ({total_height} Rows x {TOTAL_DETECTORS} Columns)")
+    print(f" 3. Matrix DAT      : {dat_filename}")
+    print(f" 4. Estimasi Sumber : X={est_final['x']}cm, Y={est_final['y']}cm, Z={est_final['z']}cm (Conf: {est_final['confidence']}%)")
     print("=" * 78)
     
     # Tampilkan preview matriks
@@ -475,22 +419,10 @@ def run_scanning(
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="RADIOSCAN MATRIX - 72-Detector Simulation Gateway")
-    parser.add_argument("--object-name", "-o", type=str, default="Gentong", help="Nama/Identitas Objek yang di-scan (Default: Gentong)")
-    parser.add_argument("--loops", "-l", type=int, default=1, help="Jumlah loop pemindaian per baris/blok (Default: 1)")
-    parser.add_argument("--transition-delay", "-t", type=float, default=1.0, help="Lama delay perpindahan baris dalam detik (Default: 1.0)")
     parser.add_argument("--port", "-p", type=str, default="COM5", help="Nama port serial/COM hardware (Default: COM5)")
     parser.add_argument("--baud", "-b", type=int, default=115200, help="Baudrate komunikasi serial (Default: 115200)")
     parser.add_argument("--steps", "-s", type=int, default=TOTAL_HEIGHT_SCAN, help=f"Jumlah level tinggi (Default: {TOTAL_HEIGHT_SCAN})")
     parser.add_argument("--delay", "-d", type=float, default=SAMPLING_INTERVAL, help="Jeda waktu per-step dalam detik (Default: 1.0)")
     args = parser.parse_args()
 
-    run_scanning(
-        total_height=args.steps, 
-        delay=args.delay, 
-        port=args.port, 
-        baud=args.baud,
-        object_name=args.object_name,
-        total_loops=args.loops,
-        transition_delay=args.transition_delay
-    )
-
+    run_scanning(total_height=args.steps, delay=args.delay, port=args.port, baud=args.baud)

@@ -27,27 +27,6 @@
 
     <!-- HUD Status Chips & Modules -->
     <div class="header-hud-bar">
-      <!-- Objek Target Chip & Dynamic Switcher -->
-      <div class="hud-chip object-chip" id="hudObjectChip" title="Pilih objek scan dari TiDB Cloud / Raspberry Pi 5">
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="color:#A78BFA;flex-shrink:0;">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-          <line x1="12" y1="22.08" x2="12" y2="12"/>
-        </svg>
-        <span style="font-size:10.5px;font-weight:700;letter-spacing:0.4px;">OBJEK:</span>
-        <select id="selectActiveObject" class="hud-object-select" onchange="onObjectSelectChange(this.value)" title="Pilih objek target untuk melihat hasil scan di TiDB Cloud">
-          <option value="ALL">📦 Semua Objek (Terbaru)</option>
-          <option value="Gentong" selected>Gentong</option>
-        </select>
-        <button type="button" class="btn-refresh-objects" id="btnRefreshObjects" onclick="refreshAvailableObjects(true)" title="Sinkronkan daftar objek dari TiDB Cloud">
-          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="23 4 23 10 17 10"></polyline>
-            <polyline points="1 20 1 14 7 14"></polyline>
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-          </svg>
-        </button>
-      </div>
-
       <!-- Timestamp & Last Sync Chip -->
       <div class="hud-chip sync-chip" id="hudSyncChip" title="Waktu rekaman data terakhir dari TiDB Cloud / Firebase">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="color:#F59E0B;flex-shrink:0;">
@@ -81,16 +60,11 @@
       <div class="hud-chip">
         <span>PORT:</span> <strong id="headerComPort">COM5</strong>
       </div>
+      <div class="hud-chip">
+        <span>BAUD:</span> <strong id="headerBaudrate">115200</strong>
+      </div>
       <div class="hud-chip progress-chip">
         <span>Z-STEP:</span> <strong id="headerHeightProgress">0 / 10</strong>
-      </div>
-      <div class="hud-chip loop-chip" id="hudLoopChip" title="Iterasi loop pemindaian per baris">
-        <span>LOOP:</span> <strong id="headerLoopProgress" style="color:#7DD3FC;">1 / 1</strong>
-      </div>
-      <!-- Transition Status Chip -->
-      <div class="hud-chip transition-chip" id="hudTransitionChip" style="display:none;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#FBBF24;" title="Proses delay transisi perpindahan baris">
-        <span class="transition-spinner"></span>
-        <strong id="headerTransitionText">Transisi Lift (1.5s)...</strong>
       </div>
     </div>
   </header>
@@ -100,7 +74,7 @@
        ======================================================================== -->
   <div class="control-deck">
     <div class="command-btn-group">
-      <button class="btn-action btn-start" id="btnStartScan" onclick="openStartScanModal()">
+      <button class="btn-action btn-start" id="btnStartScan" onclick="startScanning()">
         <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         <span>START SCAN</span>
       </button>
@@ -112,17 +86,6 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
         <span>RESET</span>
       </button>
-
-      <!-- TOMBOL SIMPAN HASIL SCAN (KUNING SAAT SCAN -> HIJAU SAAT BERES/STOP) -->
-      <button class="btn-action btn-save-session btn-save-idle" id="btnSaveSession" onclick="saveScanSession()" disabled title="Simpan seluruh hasil scan ke database TiDB Cloud">
-        <svg id="saveBtnIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-          <polyline points="17 21 17 13 7 13 7 21"/>
-          <polyline points="7 3 7 8 15 8"/>
-        </svg>
-        <span id="saveBtnLabel">SIMPAN HASIL</span>
-      </button>
-
       <button class="btn-action btn-outline" id="btnForceExport" onclick="exportMatrixCsv()" title="Export acquired scan matrix to CSV">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>CSV</span>
@@ -158,17 +121,6 @@
         <input type="number" id="inputTotalHeight" value="10" min="1" max="50" onchange="updateTotalHeights(this.value)">
       </div>
 
-      <div class="param-pill" title="Jumlah loop per baris scan">
-        <label for="inputTotalLoops">Loops:</label>
-        <input type="number" id="inputTotalLoops" value="1" min="1" max="20" onchange="updateTotalLoops(this.value)">
-      </div>
-
-      <div class="param-pill" title="Lama delay transisi lift antar baris (detik)">
-        <label for="inputTransitionDelay">Delay:</label>
-        <input type="number" id="inputTransitionDelay" value="1.5" min="0" max="15" step="0.5" onchange="updateTransitionDelay(this.value)">
-        <span style="font-size:10px;color:var(--text-muted);">s</span>
-      </div>
-
       <div class="param-pill" title="Sampling acquisition rate">
         <label for="inputSamplingRate">Rate:</label>
         <select id="inputSamplingRate" onchange="updateSamplingInterval(this.value)">
@@ -176,6 +128,18 @@
           <option value="500">2.0 Hz (500ms)</option>
           <option value="2000">0.5 Hz (2s)</option>
           <option value="100">10.0 Hz (Fast)</option>
+        </select>
+      </div>
+
+      <div class="param-pill" title="RS485 Modbus baudrate">
+        <label for="inputBaudrate">Baud:</label>
+        <select id="inputBaudrate" onchange="updateBaudrate(this.value)">
+          <option value="115200" selected>115200</option>
+          <option value="9600">9600</option>
+          <option value="19200">19200</option>
+          <option value="38400">38400</option>
+          <option value="57600">57600</option>
+          <option value="230400">230400</option>
         </select>
       </div>
 
@@ -478,17 +442,6 @@
           <div class="kpi-number" id="metricBgCps">31.4 <span class="kpi-unit">cps</span></div>
           <div class="kpi-subtext">Base Radiation</div>
         </div>
-
-        <div class="kpi-tile kpi-time" title="Waktu rekaman data terakhir di TiDB Cloud">
-          <div class="kpi-header">Last DB Record</div>
-          <div class="kpi-number" id="metricLastTimestamp">
-            <span id="metricLastTime">--:--:--</span>
-            <span class="kpi-unit" id="metricLastTz">WIB</span>
-          </div>
-          <div class="kpi-subtext" id="metricLastTimestampSub">
-            <span id="metricLastDate">-- --- ----</span> &bull; <strong style="color:var(--accent-emerald);">TiDB</strong>
-          </div>
-        </div>
       </div>
 
       <!-- Bottom Split: Real-time Line Chart + Modbus Terminal Console -->
@@ -530,127 +483,6 @@
     </main>
   </div>
 </div>
-
-<!-- ========================================================================
-     MODAL: KONFIGURASI START SCAN & IDENTITAS OBJEK
-     ======================================================================== -->
-<div class="scan-modal-backdrop" id="modalStartScanConfig" style="display:none;" onclick="if(event.target===this) closeStartScanModal()">
-  <div class="scan-modal-card glassmorphism-card animate-scale-up">
-    <div class="scan-modal-header">
-      <div class="scan-modal-title-wrap">
-        <div class="scan-modal-icon-badge">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>
-          </svg>
-        </div>
-        <div>
-          <h3>Konfigurasi Pemindaian Objek Baru</h3>
-          <p class="scan-modal-sub">Atur identitas target objek, ketinggian scan, multi-loop, dan delay transisi lift.</p>
-        </div>
-      </div>
-      <button class="scan-modal-close" onclick="closeStartScanModal()" title="Tutup">&times;</button>
-    </div>
-
-    <div class="scan-modal-body">
-      <!-- 1. Identitas Objek Target (Sinkron TiDB Cloud) -->
-      <div class="modal-form-group">
-        <label class="modal-label">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-          Nama / Identitas Objek Target (Sesuai TiDB Cloud) <span class="req-star">*</span>
-        </label>
-        <input type="text" id="modalInputObjectName" class="modal-text-input" list="tidbObjectDatalist" value="Tong Baru" placeholder="Pilih dari daftar TiDB atau ketik nama baru..." autocomplete="off">
-        <datalist id="tidbObjectDatalist">
-          <option value="Tong Baru">
-          <option value="Gentong">
-          <option value="Gentong Drum Demo">
-          <option value="Gentong Limbah 01">
-        </datalist>
-        
-        <!-- Preset Tag Suggestions from TiDB -->
-        <div class="preset-tag-list" id="modalPresetTagList">
-          <span class="preset-tag active" onclick="selectObjectPreset('Tong Baru')">Tong Baru</span>
-          <span class="preset-tag" onclick="selectObjectPreset('Gentong')">Gentong</span>
-          <span class="preset-tag" onclick="selectObjectPreset('Gentong Drum Demo')">Gentong Drum Demo</span>
-          <span class="preset-tag" onclick="selectObjectPreset('Gentong Limbah 01')">Gentong Limbah 01</span>
-        </div>
-      </div>
-
-      <!-- 2. Grid Parameters: Steps, Loops, Delay -->
-      <div class="modal-grid-3">
-        <div class="modal-form-group">
-          <label class="modal-label" for="modalInputSteps">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/></svg>
-            Jumlah Blok / Steps
-          </label>
-          <input type="number" id="modalInputSteps" class="modal-num-input" value="10" min="1" max="50">
-          <span class="modal-help">Level elevasi (Z-axis)</span>
-        </div>
-
-        <div class="modal-form-group">
-          <label class="modal-label" for="modalInputLoops">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            Loop per Baris
-          </label>
-          <input type="number" id="modalInputLoops" class="modal-num-input" value="1" min="1" max="20">
-          <span class="modal-help">Pengulangan per baris</span>
-        </div>
-
-        <div class="modal-form-group">
-          <label class="modal-label" for="modalInputTransitionDelay">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            Delay Transisi (Detik)
-          </label>
-          <input type="number" id="modalInputTransitionDelay" class="modal-num-input" value="1.5" min="0" max="15" step="0.5">
-          <span class="modal-help">Jeda lift pindah baris</span>
-        </div>
-      </div>
-
-      <!-- 3. Port & Sampling Rate in Modal -->
-      <div class="modal-grid-2">
-        <div class="modal-form-group">
-          <label class="modal-label">Port Serial / COM</label>
-          <select id="modalInputComPort" class="modal-select-input">
-            <option value="COM1">COM1</option>
-            <option value="COM2">COM2</option>
-            <option value="COM3">COM3</option>
-            <option value="COM4">COM4</option>
-            <option value="COM5" selected>COM5</option>
-            <option value="COM6">COM6</option>
-            <option value="COM7">COM7</option>
-            <option value="COM8">COM8</option>
-            <option value="COM9">COM9</option>
-            <option value="COM10">COM10</option>
-            <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
-            <option value="/dev/ttyACM0">/dev/ttyACM0</option>
-          </select>
-        </div>
-
-        <div class="modal-form-group">
-          <label class="modal-label">Sampling Interval</label>
-          <select id="modalInputSamplingRate" class="modal-select-input">
-            <option value="1000" selected>1.0 Hz (1.0s / sample)</option>
-            <option value="500">2.0 Hz (500ms / sample)</option>
-            <option value="2000">0.5 Hz (2.0s / sample)</option>
-            <option value="100">10.0 Hz (100ms Fast)</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="scan-modal-footer">
-      <button class="btn-modal-cancel" onclick="closeStartScanModal()">Batal</button>
-      <button class="btn-modal-launch" onclick="launchConfiguredScan()">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span>Mulai Pemindaian</span>
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- ========================================================================
-     FLOATING TOAST / NOTIFICATION CONTAINER
-     ======================================================================== -->
-<div class="toast-notification-container" id="toastNotificationContainer"></div>
 @endsection
 
 @section('scripts')
@@ -669,14 +501,6 @@ const APP_STATE = {
   selectedBaudrate: 115200,
   totalHeights: 10,
   currentHeight: 0,
-  objectName: 'Gentong',
-  totalLoops: 1,
-  currentLoop: 1,
-  transitionDelay: 1.5,
-  sessionId: '',
-  sessionRecords: [], // Holds all individual loop/height records
-  saveState: 'idle', // 'idle' | 'scanning' | 'ready' | 'saved'
-  isTransitioning: false,
   samplingIntervalMs: 1000,
   hotspotThreshold: 100,
   isScanning: false,
@@ -1420,277 +1244,7 @@ function generateDummyModuleData(moduleId, isHotspot) {
   return data;
 }
 
-// ==========================================
-// 12. MODAL DIALOG & CONFIGURATION HANDLERS
-// ==========================================
-function openStartScanModal() {
-  if (APP_STATE.isScanning && !APP_STATE.isPaused) return;
-
-  if (APP_STATE.isPaused) {
-    pauseScanning();
-    return;
-  }
-
-  // Pre-fill modal inputs with currently selected TiDB object
-  const selectObj = document.getElementById('selectActiveObject');
-  let activeName = (selectObj && selectObj.value && selectObj.value !== 'ALL') ? selectObj.value : APP_STATE.objectName;
-  if (!activeName || activeName === 'ALL') activeName = 'Tong Baru';
-
-  const nameInput = document.getElementById('modalInputObjectName');
-  const stepsInput = document.getElementById('modalInputSteps');
-  const loopsInput = document.getElementById('modalInputLoops');
-  const delayInput = document.getElementById('modalInputTransitionDelay');
-  const portInput = document.getElementById('modalInputComPort');
-  const rateInput = document.getElementById('modalInputSamplingRate');
-
-  if (nameInput) nameInput.value = activeName;
-  if (stepsInput) stepsInput.value = APP_STATE.totalHeights || 10;
-  if (loopsInput) loopsInput.value = APP_STATE.totalLoops || 1;
-  if (delayInput) delayInput.value = APP_STATE.transitionDelay || 1.5;
-  if (portInput) portInput.value = APP_STATE.selectedComPort || 'COM5';
-  if (rateInput) rateInput.value = APP_STATE.samplingIntervalMs || 1000;
-
-  // Highlight matching preset tag if any
-  document.querySelectorAll('#modalPresetTagList .preset-tag').forEach(tag => {
-    if (tag.textContent.startsWith(activeName)) tag.classList.add('active');
-    else tag.classList.remove('active');
-  });
-
-  const modal = document.getElementById('modalStartScanConfig');
-  if (modal) modal.style.display = 'flex';
-}
-
-function closeStartScanModal() {
-  const modal = document.getElementById('modalStartScanConfig');
-  if (modal) modal.style.display = 'none';
-}
-
-function selectObjectPreset(name) {
-  const input = document.getElementById('modalInputObjectName');
-  if (input) input.value = name;
-
-  document.querySelectorAll('#modalPresetTagList .preset-tag').forEach(tag => {
-    if (tag.textContent.startsWith(name)) tag.classList.add('active');
-    else tag.classList.remove('active');
-  });
-}
-
-function launchConfiguredScan() {
-  const nameInput = document.getElementById('modalInputObjectName');
-  const stepsInput = document.getElementById('modalInputSteps');
-  const loopsInput = document.getElementById('modalInputLoops');
-  const delayInput = document.getElementById('modalInputTransitionDelay');
-  const portInput = document.getElementById('modalInputComPort');
-  const rateInput = document.getElementById('modalInputSamplingRate');
-
-  const objName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : 'Gentong';
-  const steps = (stepsInput && parseInt(stepsInput.value)) ? Math.max(1, parseInt(stepsInput.value)) : 10;
-  const loops = (loopsInput && parseInt(loopsInput.value)) ? Math.max(1, parseInt(loopsInput.value)) : 1;
-  const transDelay = (delayInput && !isNaN(parseFloat(delayInput.value))) ? Math.max(0, parseFloat(delayInput.value)) : 1.5;
-  const port = (portInput && portInput.value) ? portInput.value : 'COM5';
-  const rate = (rateInput && parseInt(rateInput.value)) ? parseInt(rateInput.value) : 1000;
-
-  APP_STATE.objectName = objName;
-  APP_STATE.totalHeights = steps;
-  APP_STATE.totalLoops = loops;
-  APP_STATE.transitionDelay = transDelay;
-  APP_STATE.selectedComPort = port;
-  APP_STATE.samplingIntervalMs = rate;
-
-  closeStartScanModal();
-
-  // Update HUD displays
-  const selectObj = document.getElementById('selectActiveObject');
-  if (selectObj) {
-    let exists = false;
-    for (let i = 0; i < selectObj.options.length; i++) {
-      if (selectObj.options[i].value === objName) {
-        exists = true;
-        break;
-      }
-    }
-    if (!exists) {
-      const opt = new Option(objName + ' (Sesi Baru)', objName, true, true);
-      selectObj.add(opt);
-    }
-    selectObj.value = objName;
-  }
-  const elHeight = document.getElementById('headerHeightProgress');
-  if (elHeight) elHeight.textContent = `0 / ${steps}`;
-  const elLoop = document.getElementById('headerLoopProgress');
-  if (elLoop) elLoop.textContent = `1 / ${loops}`;
-  const elPort = document.getElementById('headerComPort');
-  if (elPort) elPort.textContent = port;
-
-  // Sync Quick Inputs
-  const qSteps = document.getElementById('inputTotalHeight');
-  if (qSteps) qSteps.value = steps;
-  const qLoops = document.getElementById('inputTotalLoops');
-  if (qLoops) qLoops.value = loops;
-  const qDelay = document.getElementById('inputTransitionDelay');
-  if (qDelay) qDelay.value = transDelay;
-  const qPort = document.getElementById('inputComPort');
-  if (qPort) qPort.value = port;
-  const qRate = document.getElementById('inputSamplingRate');
-  if (qRate) qRate.value = rate;
-
-  buildSidebarLoopList();
-
-  // Start actual acquisition
-  startScanning(true);
-}
-
-// ==========================================
-// 13. DYNAMIC SAVE BUTTON & TOAST NOTIFICATIONS
-// ==========================================
-function setSaveButtonState(state) {
-  APP_STATE.saveState = state;
-  const btn = document.getElementById('btnSaveSession');
-  const label = document.getElementById('saveBtnLabel');
-  const icon = document.getElementById('saveBtnIcon');
-  if (!btn || !label) return;
-
-  btn.classList.remove('btn-save-idle', 'btn-save-scanning', 'btn-save-ready', 'btn-save-saved');
-
-  if (state === 'scanning') {
-    btn.classList.add('btn-save-scanning');
-    btn.disabled = true;
-    label.textContent = 'SCANNING... (TERKUNCI)';
-    if (icon) {
-      icon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>';
-    }
-  } else if (state === 'ready') {
-    btn.classList.add('btn-save-ready');
-    btn.disabled = false;
-    label.textContent = 'SIMPAN HASIL SCAN';
-    if (icon) {
-      icon.innerHTML = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>';
-    }
-  } else if (state === 'saved') {
-    btn.classList.add('btn-save-saved');
-    btn.disabled = true;
-    label.textContent = 'HASIL TERSIMPAN';
-    if (icon) {
-      icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
-    }
-  } else {
-    // idle
-    btn.classList.add('btn-save-idle');
-    btn.disabled = true;
-    label.textContent = 'SIMPAN HASIL';
-    if (icon) {
-      icon.innerHTML = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>';
-    }
-  }
-}
-
-function showToast(type, title, message, showSaveAction = false) {
-  const container = document.getElementById('toastNotificationContainer');
-  if (!container) return;
-
-  const toastId = 'toast_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-  const toast = document.createElement('div');
-  toast.className = `toast-card toast-${type}`;
-  toast.id = toastId;
-
-  let iconSvg = '';
-  if (type === 'success') {
-    iconSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
-  } else if (type === 'warning') {
-    iconSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-  } else {
-    iconSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
-  }
-
-  let actionsHtml = '';
-  if (showSaveAction && APP_STATE.saveState === 'ready') {
-    actionsHtml = `
-      <div class="toast-actions">
-        <button class="btn-toast-primary" onclick="saveScanSession(); removeToast('${toastId}')">💾 Simpan Sekarang</button>
-        <button class="btn-toast-secondary" onclick="removeToast('${toastId}')">Nanti</button>
-      </div>
-    `;
-  }
-
-  toast.innerHTML = `
-    <div class="toast-icon">${iconSvg}</div>
-    <div class="toast-content">
-      <div class="toast-title">${title}</div>
-      <div class="toast-desc">${message}</div>
-      ${actionsHtml}
-    </div>
-    <button class="toast-close" onclick="removeToast('${toastId}')">&times;</button>
-  `;
-
-  container.appendChild(toast);
-
-  setTimeout(() => {
-    removeToast(toastId);
-  }, 9000);
-}
-
-function removeToast(toastId) {
-  const el = document.getElementById(toastId);
-  if (el) {
-    el.style.opacity = '0';
-    el.style.transform = 'translateX(40px) scale(0.9)';
-    setTimeout(() => {
-      if (el && el.parentNode) el.parentNode.removeChild(el);
-    }, 250);
-  }
-}
-
-function saveScanSession() {
-  if (APP_STATE.sessionRecords.length === 0) {
-    showToast('warning', 'Data Kosong', 'Tidak ada rekaman data pemindaian untuk disimpan.');
-    return;
-  }
-
-  const btn = document.getElementById('btnSaveSession');
-  const label = document.getElementById('saveBtnLabel');
-  if (btn) btn.disabled = true;
-  if (label) label.textContent = 'MENYIMPAN...';
-
-  const payload = {
-    object_name: APP_STATE.objectName,
-    session_id: APP_STATE.sessionId,
-    total_loops: APP_STATE.totalLoops,
-    transition_delay: APP_STATE.transitionDelay,
-    records: APP_STATE.sessionRecords
-  };
-
-  fetch('/matrix-data/save-session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': '{{ csrf_token() }}'
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.status === 'success') {
-      setSaveButtonState('saved');
-      logTerminal(`<span class="log-badge-ok">[DB SAVE]</span> Sesi objek <strong>'${APP_STATE.objectName}'</strong> (${data.count} baris) berhasil disimpan ke <strong>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'SQLite'}</strong>!`);
-      showToast('success', 'Penyimpanan Berhasil!', `Data pemindaian <b>${APP_STATE.objectName}</b> (${data.count} record) berhasil disimpan ke <b>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>!`);
-      updateTimestampDisplay(new Date().toLocaleTimeString(), data.db_target === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
-      fetchInitialHistory();
-    } else {
-      setSaveButtonState('ready');
-      showToast('warning', 'Gagal Menyimpan', data.message || 'Terjadi kesalahan saat menyimpan ke database.');
-    }
-  })
-  .catch(err => {
-    console.error('[Save Session Error]', err);
-    setSaveButtonState('ready');
-    showToast('warning', 'Koneksi Terputus', 'Gagal mengirim data ke server. Silakan coba lagi.');
-  });
-}
-
-// ==========================================
-// 14. SCANNING ENGINE WITH MULTI-LOOP & TRANSITION DELAY
-// ==========================================
-function startScanning(fromModal = false) {
+function startScanning() {
   if (APP_STATE.isScanning && !APP_STATE.isPaused) return;
 
   if (APP_STATE.isPaused) {
@@ -1699,34 +1253,20 @@ function startScanning(fromModal = false) {
     document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
     logTerminal('<span class="log-badge-ok">[RESUMED]</span> Scanning sequence continued.');
   } else {
-    if (!fromModal) {
-      openStartScanModal();
-      return;
-    }
-
     APP_STATE.isScanning = true;
-    APP_STATE.currentHeight = 1;
-    APP_STATE.currentLoop = 1;
+    APP_STATE.currentHeight = 0;
     APP_STATE.matrixData = [];
-    APP_STATE.sessionRecords = [];
     APP_STATE.xs1History = [];
     APP_STATE.xs2History = [];
     APP_STATE.xs3History = [];
     APP_STATE.timestamps = [];
     APP_STATE.elapsedSeconds = 0;
-    APP_STATE.isTransitioning = false;
-    APP_STATE.sessionId = 'SES_' + new Date().toISOString().replace(/\D/g, '').substring(0, 14) + '_' + Math.floor(Math.random() * 900 + 100);
-
-    // Save button turns YELLOW & LOCKED
-    setSaveButtonState('scanning');
 
     document.getElementById('btnStartScan').disabled = true;
     document.getElementById('btnPauseScan').disabled = false;
     document.getElementById('btnStopScan').disabled = false;
-    document.getElementById('headerHeightProgress').textContent = `1 / ${APP_STATE.totalHeights}`;
-    document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
 
-    logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops | Delay Transisi: ${APP_STATE.transitionDelay}s`);
+    logTerminal('<span class="log-badge-ok">[SCAN]</span> 72-Ch Matrix acquisition started.');
   }
 
   // Start Elapsed Timer
@@ -1740,16 +1280,16 @@ function startScanning(fromModal = false) {
     }
   }, 1000);
 
-  // Trigger first cycle immediately then set interval
+  // Scanning Interval Cycle
   clearInterval(APP_STATE.scanIntervalId);
-  executeScanCycle();
+  APP_STATE.scanIntervalId = setInterval(executeScanCycle, APP_STATE.samplingIntervalMs);
 }
 
 function executeScanCycle() {
-  if (!APP_STATE.isScanning || APP_STATE.isPaused || APP_STATE.isTransitioning) return;
+  if (APP_STATE.isPaused) return;
 
+  APP_STATE.currentHeight++;
   const h = APP_STATE.currentHeight;
-  const l = APP_STATE.currentLoop;
 
   if (h > APP_STATE.totalHeights) {
     stopScanning(true);
@@ -1762,12 +1302,7 @@ function executeScanCycle() {
   const d3 = generateDummyModuleData(3, hasAnomaly);
   const full72 = [...d1, ...d2, ...d3];
 
-  // Update heatmap matrix representation
-  if (APP_STATE.matrixData.length < h) {
-    APP_STATE.matrixData.push(full72);
-  } else {
-    APP_STATE.matrixData[h - 1] = full72;
-  }
+  APP_STATE.matrixData.push(full72);
 
   // Compute Averages
   const avg1 = d1.reduce((a, b) => a + b, 0) / 24;
@@ -1777,24 +1312,9 @@ function executeScanCycle() {
   const maxChannelIndex = full72.indexOf(maxCps) + 1;
   const totalCps = full72.reduce((a, b) => a + b, 0);
   const globalAvg = (totalCps / 72).toFixed(1);
-  const nowTs = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-  // Store in sessionRecords for batch/single save
-  APP_STATE.sessionRecords.push({
-    timestamp: nowTs,
-    height: h,
-    loop_index: l,
-    detector_data: full72,
-    xs1_data: d1,
-    xs2_data: d2,
-    xs3_data: d3,
-    max_cps: maxCps,
-    avg_cps: parseFloat(globalAvg)
-  });
-
-  // Update UI Stats & HUD
+  // Update UI Stats
   document.getElementById('headerHeightProgress').textContent = `${h} / ${APP_STATE.totalHeights}`;
-  document.getElementById('headerLoopProgress').textContent = `${l} / ${APP_STATE.totalLoops}`;
   document.getElementById('metricActiveLoop').innerHTML = `${h} <span class="kpi-unit">/ ${APP_STATE.totalHeights}</span>`;
   document.getElementById('metricMaxCps').innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
   document.getElementById('metricMaxChannel').textContent = `Detector D${maxChannelIndex} (XS${maxChannelIndex <= 24 ? 1 : (maxChannelIndex <= 48 ? 2 : 3)})`;
@@ -1835,11 +1355,11 @@ function executeScanCycle() {
 
   // Log to Terminal Screen
   const statusTag = maxCps >= APP_STATE.hotspotThreshold ? '<span class="log-badge-alert">[HOTSPOT]</span>' : '<span class="log-badge-ok">[NORMAL]</span>';
-  logTerminal(`[Tinggi:${h}/${APP_STATE.totalHeights} | Loop:${l}/${APP_STATE.totalLoops}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
+  logTerminal(`[L:${h}/${APP_STATE.totalHeights}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
 
   // Push to Firebase RTDB if active
   if (APP_STATE.useFirebase && firebaseDb) {
-    pushToFirebase(h, l, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
+    pushToFirebase(h, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
   }
 
   // Highlight Sidebar Loop item
@@ -1854,42 +1374,6 @@ function executeScanCycle() {
   render3DSourceViewport();
   renderTopViewXZ();
   updateRawTable();
-
-  // Schedule Next Step (Multi-loop or Transition Delay)
-  if (l < APP_STATE.totalLoops) {
-    // Next loop on the same height
-    APP_STATE.currentLoop++;
-    APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
-  } else {
-    // Current height finished all loops
-    if (h < APP_STATE.totalHeights) {
-      // Transition to next height step
-      if (APP_STATE.transitionDelay > 0) {
-        APP_STATE.isTransitioning = true;
-        const transChip = document.getElementById('hudTransitionChip');
-        const transText = document.getElementById('headerTransitionText');
-        if (transChip) transChip.style.display = 'inline-flex';
-        if (transText) transText.textContent = `Transisi Lift Baris ${h} ➔ ${h+1} (${APP_STATE.transitionDelay}s)...`;
-
-        logTerminal(`<span class="log-badge-warn">[TRANSISI LIFT]</span> Selesai baris ${h} (${APP_STATE.totalLoops} loop). Menunggu jeda transisi lift ${APP_STATE.transitionDelay}s sebelum baris ${h+1}...`);
-
-        APP_STATE.scanIntervalId = setTimeout(() => {
-          APP_STATE.isTransitioning = false;
-          if (transChip) transChip.style.display = 'none';
-          APP_STATE.currentHeight = h + 1;
-          APP_STATE.currentLoop = 1;
-          executeScanCycle();
-        }, APP_STATE.transitionDelay * 1000);
-      } else {
-        APP_STATE.currentHeight = h + 1;
-        APP_STATE.currentLoop = 1;
-        APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
-      }
-    } else {
-      // All heights and all loops completed!
-      stopScanning(true);
-    }
-  }
 }
 
 function pauseScanning() {
@@ -1907,20 +1391,14 @@ function pauseScanning() {
     label.textContent = 'PAUSE';
     btn.classList.remove('btn-start');
     logTerminal('<span class="log-badge-ok">[RESUMED]</span> Acquisition active.');
-    executeScanCycle();
   }
 }
 
 function stopScanning(isCompleted = false) {
-  clearTimeout(APP_STATE.scanIntervalId);
   clearInterval(APP_STATE.scanIntervalId);
   clearInterval(APP_STATE.timerIntervalId);
   APP_STATE.isScanning = false;
   APP_STATE.isPaused = false;
-  APP_STATE.isTransitioning = false;
-
-  const transChip = document.getElementById('hudTransitionChip');
-  if (transChip) transChip.style.display = 'none';
 
   document.getElementById('btnStartScan').disabled = false;
   document.getElementById('btnPauseScan').disabled = true;
@@ -1928,38 +1406,23 @@ function stopScanning(isCompleted = false) {
   document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
   document.getElementById('btnPauseScan').classList.remove('btn-start');
 
-  if (APP_STATE.sessionRecords.length > 0) {
-    // Tombol Simpan berubah menjadi HIJAU & UNLOCKED
-    setSaveButtonState('ready');
-
-    if (isCompleted) {
-      logTerminal(`<span class="log-badge-ok">[SELESAI]</span> Pemindaian target '<strong>${APP_STATE.objectName}</strong>' selesai (${APP_STATE.sessionRecords.length} record). Tombol simpan aktif (HIJAU).`);
-      showToast('success', 'Pemindaian Selesai!', `Pemindaian objek <b>${APP_STATE.objectName}</b> telah selesai (${APP_STATE.sessionRecords.length} record). Silakan klik <b>SIMPAN HASIL SCAN</b> untuk menyimpan ke database.`, true);
-    } else {
-      logTerminal(`<span class="log-badge-warn">[BERHENTI MANUAL]</span> Pemindaian dihentikan. (${APP_STATE.sessionRecords.length} record terkumpul). Tombol simpan aktif (HIJAU).`);
-      showToast('warning', 'Pemindaian Dihentikan', `Pemindaian objek <b>${APP_STATE.objectName}</b> dihentikan (${APP_STATE.sessionRecords.length} record). Anda dapat menyimpan data ini sekarang.`, true);
-    }
+  if (isCompleted) {
+    logTerminal('<span class="log-badge-ok">[COMPLETE]</span> Full scan matrix acquired.');
   } else {
-    setSaveButtonState('idle');
     logTerminal('<span class="log-badge-warn">[RESET]</span> Scanner state cleared.');
   }
 }
 
-// 15. FIREBASE REALTIME PUSH & SYNC
-function pushToFirebase(height, loopIdx, fullArray, d1, d2, d3, maxCps, maxCh, avgCps) {
+// 13. FIREBASE REALTIME PUSH & SYNC
+function pushToFirebase(height, fullArray, d1, d2, d3, maxCps, maxCh, avgCps) {
   const timestamp = new Date().toISOString();
   const startTime = Date.now();
 
   try {
     firebaseDb.ref('radiation_scans/latest').set({
       timestamp: timestamp,
-      object_name: APP_STATE.objectName,
-      session_id: APP_STATE.sessionId,
       current_height: height,
       total_height: APP_STATE.totalHeights,
-      current_loop: loopIdx,
-      total_loops: APP_STATE.totalLoops,
-      transition_delay: APP_STATE.transitionDelay,
       xs1_data: d1,
       xs2_data: d2,
       xs3_data: d3,
@@ -1971,22 +1434,11 @@ function pushToFirebase(height, loopIdx, fullArray, d1, d2, d3, maxCps, maxCh, a
       status: maxCps >= APP_STATE.hotspotThreshold ? 'alert' : 'safe'
     }).then(() => {
       const latency = Date.now() - startTime;
-      const elLatency = document.getElementById('syncLatencyText');
-      if (elLatency) elLatency.textContent = `${latency}ms`;
+      document.getElementById('syncLatencyText').textContent = `${latency}ms`;
     });
   } catch (e) {
     console.warn("[Firebase Push Error]", e);
   }
-}
-
-function updateTotalLoops(val) {
-  APP_STATE.totalLoops = Math.max(1, parseInt(val) || 1);
-  const el = document.getElementById('headerLoopProgress');
-  if (el) el.textContent = `1 / ${APP_STATE.totalLoops}`;
-}
-
-function updateTransitionDelay(val) {
-  APP_STATE.transitionDelay = Math.max(0, parseFloat(val) || 1.5);
 }
 
 function toggleFirebaseSync() {
@@ -2336,313 +1788,79 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchInitialHistory();
 });
 
-function parseTimestampComponents(rawTime) {
-  if (!rawTime || rawTime === 'Memuat...' || rawTime === 'Belum ada data') {
-    return {
-      full: rawTime || '--:--:--',
-      time: '--:--:--',
-      date: 'No Record',
-      tz: 'WIB'
-    };
-  }
-
-  let d = null;
+function formatTimestampPretty(rawTime) {
+  if (!rawTime || rawTime === 'Memuat...' || rawTime === 'Belum ada data') return rawTime || '--:--:--';
+  
   if (typeof rawTime === 'string') {
+    // If it contains T (e.g. 2026-09-07T02:48:50.941913Z)
     if (rawTime.includes('T')) {
-      d = new Date(rawTime);
-    } else if (rawTime.includes('-') && rawTime.includes(':')) {
-      const parts = rawTime.trim().split(' ');
-      if (parts.length === 2) {
-        const dateParts = parts[0].split('-');
-        const timePart = parts[1].split('.')[0];
-        if (dateParts.length === 3) {
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-          const mIdx = parseInt(dateParts[1], 10) - 1;
-          const mName = months[mIdx] || dateParts[1];
-          return {
-            full: `${parts[0]} ${timePart}`,
-            time: timePart,
-            date: `${dateParts[2]} ${mName} ${dateParts[0]}`,
-            tz: 'WIB'
-          };
+      try {
+        const d = new Date(rawTime);
+        if (!isNaN(d.getTime())) {
+          const pad = (n) => String(n).padStart(2, '0');
+          const YYYY = d.getFullYear();
+          const MM = pad(d.getMonth() + 1);
+          const DD = pad(d.getDate());
+          const hh = pad(d.getHours());
+          const mm = pad(d.getMinutes());
+          const ss = pad(d.getSeconds());
+          return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`;
         }
-      }
-      d = new Date(rawTime.replace(' ', 'T'));
+      } catch (e) {}
+      return rawTime.replace('T', ' ').split('.')[0].substring(0, 19);
     }
+    // If already standard YYYY-MM-DD HH:MM:SS or similar
+    return rawTime.split('.')[0].substring(0, 19);
   }
-
-  if (d && !isNaN(d.getTime())) {
-    const pad = (n) => String(n).padStart(2, '0');
-    const YYYY = d.getFullYear();
-    const MM = pad(d.getMonth() + 1);
-    const DD = pad(d.getDate());
-    const hh = pad(d.getHours());
-    const mm = pad(d.getMinutes());
-    const ss = pad(d.getSeconds());
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-    const mName = months[d.getMonth()] || MM;
-    return {
-      full: `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`,
-      time: `${hh}:${mm}:${ss}`,
-      date: `${DD} ${mName} ${YYYY}`,
-      tz: 'WIB'
-    };
-  }
-
-  return {
-    full: String(rawTime).substring(0, 19),
-    time: String(rawTime).substring(0, 8),
-    date: 'Recent',
-    tz: 'WIB'
-  };
+  return String(rawTime);
 }
 
 function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
-  const parts = parseTimestampComponents(timeStr);
+  const formatted = formatTimestampPretty(timeStr);
   const elHeader = document.getElementById('headerLastSyncTime');
   const elBadge = document.getElementById('headerDbSourceBadge');
-  const elTime = document.getElementById('metricLastTime');
-  const elDate = document.getElementById('metricLastDate');
+  const elKpi = document.getElementById('metricLastTimestamp');
   
-  if (elHeader) elHeader.textContent = parts.full;
+  if (elHeader) elHeader.textContent = formatted;
   if (elBadge && sourceLabel) elBadge.textContent = sourceLabel;
-  if (elTime) elTime.textContent = parts.time;
-  if (elDate) elDate.textContent = parts.date;
+  if (elKpi) elKpi.textContent = formatted;
 }
 
-function populateObjectDropdown(availableObjects, currentSelected) {
-  const selectEl = document.getElementById('selectActiveObject');
-  const presetContainer = document.getElementById('modalPresetTagList');
-  const datalist = document.getElementById('tidbObjectDatalist');
-  if (!selectEl) return;
-
-  const prevVal = selectEl.value;
-  selectEl.innerHTML = '';
-
-  // Default Option: Semua Objek (Terbaru)
-  const allOpt = document.createElement('option');
-  allOpt.value = 'ALL';
-  allOpt.textContent = '📦 Semua Objek (Terbaru)';
-  selectEl.appendChild(allOpt);
-
-  let matchFound = false;
-
-  if (Array.isArray(availableObjects) && availableObjects.length > 0) {
-    if (datalist) datalist.innerHTML = '';
-    if (presetContainer) presetContainer.innerHTML = '';
-
-    availableObjects.forEach(obj => {
-      const opt = document.createElement('option');
-      opt.value = obj.object_name;
-      const count = obj.total_records || 0;
-      const peak = obj.peak_cps || 0;
-      opt.textContent = `${obj.object_name} (${count} data | Max ${peak} CPS)`;
-      
-      if (currentSelected && (currentSelected === obj.object_name || currentSelected === obj.object_name.trim())) {
-        opt.selected = true;
-        matchFound = true;
-      }
-      selectEl.appendChild(opt);
-
-      // Add to Datalist for Modal Auto-complete
-      if (datalist) {
-        const dlOpt = document.createElement('option');
-        dlOpt.value = obj.object_name;
-        datalist.appendChild(dlOpt);
-      }
-
-      // Add to Modal Preset Tags
-      if (presetContainer) {
-        const tag = document.createElement('span');
-        tag.className = `preset-tag ${currentSelected === obj.object_name ? 'active' : ''}`;
-        tag.textContent = `${obj.object_name} (${count} scan)`;
-        tag.title = `Peak: ${peak} CPS | Terakhir: ${obj.last_ts || '-'}`;
-        tag.onclick = () => selectObjectPreset(obj.object_name);
-        presetContainer.appendChild(tag);
-      }
-    });
-  }
-
-  if (currentSelected === 'ALL') {
-    allOpt.selected = true;
-  } else if (!matchFound && currentSelected && currentSelected !== 'ALL') {
-    const customOpt = document.createElement('option');
-    customOpt.value = currentSelected;
-    customOpt.textContent = `${currentSelected} (Aktif)`;
-    customOpt.selected = true;
-    selectEl.appendChild(customOpt);
-  } else if (!matchFound && prevVal) {
-    selectEl.value = prevVal;
-  }
-}
-
-function onObjectSelectChange(selectedName) {
-  if (APP_STATE.isScanning) {
-    showToast('warning', 'Sedang Memindai', 'Harap tunggu atau hentikan pemindaian sebelum mengganti objek.');
-    return;
-  }
-  APP_STATE.objectName = (selectedName === 'ALL') ? 'Gentong' : selectedName;
-  loadObjectDataFromTiDB(selectedName, true);
-}
-
-function refreshAvailableObjects(isManual = false) {
-  const btn = document.getElementById('btnRefreshObjects');
-  if (btn) btn.classList.add('spinning');
-  
-  const selectEl = document.getElementById('selectActiveObject');
-  const currentObj = selectEl ? selectEl.value : 'ALL';
-
-  loadObjectDataFromTiDB(currentObj, isManual);
-}
-
-function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
-  const btn = document.getElementById('btnRefreshObjects');
-  if (btn) btn.classList.add('spinning');
-
-  let url = '/matrix-data/history';
-  if (objectName && objectName !== 'ALL') {
-    url += '?object_name=' + encodeURIComponent(objectName);
-  }
-
-  fetch(url)
-    .then(res => {
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      return res.json();
-    })
+function fetchInitialHistory() {
+  fetch('/api/matrix/history')
+    .then(res => res.json())
     .then(data => {
-      if (btn) btn.classList.remove('spinning');
-
-      // 1. Update dropdown and modal inputs from TiDB Cloud
-      if (data.available_objects) {
-        populateObjectDropdown(data.available_objects, objectName);
-      }
-
-      // 2. Process records
       if (data && data.records && data.records.length > 0) {
         const latest = data.records[0];
         const timeStr = latest.timestamp || latest.created_at || 'Baru Saja';
         updateTimestampDisplay(timeStr, data.source === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
-
-        // Sort ascending by height level
-        const sorted = [...data.records].sort((a, b) => {
-          const hA = parseInt(a.height_level) || 0;
-          const hB = parseInt(b.height_level) || 0;
-          return hA - hB;
-        });
-
-        const matrixFromDb = [];
-        let globalPeakCps = 0;
-        let peakChannelIdx = 1;
-        let totalSumCps = 0;
-        let totalCellCount = 0;
-
-        sorted.forEach(rec => {
-          if (rec.detector_data && Array.isArray(rec.detector_data)) {
-            matrixFromDb.push(rec.detector_data);
-            rec.detector_data.forEach((cps, idx) => {
-              totalSumCps += cps;
-              totalCellCount++;
-              if (cps > globalPeakCps) {
-                globalPeakCps = cps;
-                peakChannelIdx = idx + 1;
-              }
-            });
-          }
-        });
-
-        if (matrixFromDb.length > 0) {
-          APP_STATE.matrixData = matrixFromDb;
-          APP_STATE.totalHeights = matrixFromDb.length;
-          APP_STATE.currentHeight = matrixFromDb.length;
-          APP_STATE.totalLoops = latest.total_loops || 1;
-
-          if (objectName !== 'ALL') {
-            APP_STATE.objectName = objectName;
-          } else if (latest.object_name) {
-            APP_STATE.objectName = latest.object_name;
-          }
-
-          // Update HUD indicators
-          document.getElementById('headerHeightProgress').textContent = `${matrixFromDb.length} / ${matrixFromDb.length}`;
-          document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
-
-          // Update Quick Inputs
-          const qSteps = document.getElementById('inputTotalHeight');
-          if (qSteps) qSteps.value = matrixFromDb.length;
-          const qLoops = document.getElementById('inputTotalLoops');
-          if (qLoops) qLoops.value = APP_STATE.totalLoops;
-
-          // Update KPI telemetry
-          const avgCpsVal = totalCellCount > 0 ? (totalSumCps / totalCellCount).toFixed(1) : '0.0';
-          document.getElementById('metricActiveLoop').innerHTML = `${matrixFromDb.length} <span class="kpi-unit">/ ${matrixFromDb.length}</span>`;
-          document.getElementById('metricMaxCps').innerHTML = `${globalPeakCps} <span class="kpi-unit">cps</span>`;
-          document.getElementById('metricMaxChannel').textContent = `Detector D${peakChannelIdx} (XS${peakChannelIdx <= 24 ? 1 : (peakChannelIdx <= 48 ? 2 : 3)})`;
-          document.getElementById('metricAvgCps').innerHTML = `${avgCpsVal} <span class="kpi-unit">cps</span>`;
-          document.getElementById('metricTotalCounts').innerHTML = `${totalSumCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
-
-          // Update 3D Estimated Localization
-          if (globalPeakCps >= APP_STATE.hotspotThreshold) {
-            const peakHeightRow = matrixFromDb.findIndex(row => row.includes(globalPeakCps));
-            const estZ = peakHeightRow >= 0 ? (peakHeightRow + 1) * 35 : 175;
-            const estX = Math.round((peakChannelIdx / 72) * 800);
-            APP_STATE.estimatedSource = {
-              x: estX,
-              y: -30.0,
-              z: estZ,
-              confidence: Math.min(99.0, 88.0 + (globalPeakCps / 800) * 11).toFixed(1)
-            };
-            document.getElementById('statPosX').textContent = `${APP_STATE.estimatedSource.x} cm`;
-            document.getElementById('statPosY').textContent = `${APP_STATE.estimatedSource.y} cm`;
-            document.getElementById('statPosZ').textContent = `${APP_STATE.estimatedSource.z} cm`;
-            document.getElementById('statConfidence').textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
-            document.getElementById('statConfidenceVal').textContent = `${APP_STATE.estimatedSource.confidence}%`;
-            document.getElementById('statHotspotCount').textContent = `XS${peakChannelIdx <= 24 ? 1 : (peakChannelIdx <= 48 ? 2 : 3)} (D${peakChannelIdx})`;
-          }
-
-          // Update 72 individual detector readouts with latest top row
-          updateIndividualChannelsVisual(matrixFromDb[matrixFromDb.length - 1]);
-
-          // Rebuild sidebar loops & views
-          buildSidebarLoopList();
-          renderMatrixHeatmap();
-          render3DSourceViewport();
-          renderTopViewXZ();
-          updateRawTable();
-
-          if (showNotification) {
-            const displayTitle = objectName === 'ALL' ? 'Semua Objek (Terbaru)' : objectName;
-            showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${displayTitle}</b> (${matrixFromDb.length} baris) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
-            logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${displayTitle}</strong> (${matrixFromDb.length} baris level | Peak: ${globalPeakCps} CPS)`);
+        
+        if (APP_STATE.matrixData.length === 0) {
+          const matrixFromDb = [];
+          const sorted = [...data.records].reverse();
+          sorted.forEach(rec => {
+            if (rec.detector_data && Array.isArray(rec.detector_data)) {
+              matrixFromDb.push(rec.detector_data);
+            }
+          });
+          if (matrixFromDb.length > 0) {
+            APP_STATE.matrixData = matrixFromDb;
+            APP_STATE.currentHeight = matrixFromDb.length;
+            document.getElementById('headerHeightProgress').textContent = `${matrixFromDb.length} / ${APP_STATE.totalHeights}`;
+            renderMatrixHeatmap();
+            render3DSourceViewport();
+            renderTopViewXZ();
+            updateRawTable();
           }
         }
       } else {
         updateTimestampDisplay('Belum ada data', 'READY');
-        if (showNotification) {
-          showToast('info', 'Data Kosong', `Belum ada data rekaman pemindaian untuk objek <b>${objectName}</b> di database.`);
-        }
       }
     })
     .catch(err => {
       console.warn("[History Fetch Error]", err);
-      if (btn) btn.classList.remove('spinning');
-      if (showNotification) {
-        showToast('warning', 'Gagal Sinkronisasi', 'Tidak dapat mengambil data dari database server.');
-      }
+      updateTimestampDisplay(new Date().toLocaleTimeString(), 'LIVE');
     });
 }
-
-function fetchInitialHistory() {
-  loadObjectDataFromTiDB('ALL', false);
-
-  // Background Auto-sync from TiDB Cloud every 8 seconds
-  setInterval(() => {
-    if (!APP_STATE.isScanning && !APP_STATE.isPaused) {
-      const selectEl = document.getElementById('selectActiveObject');
-      const activeObj = selectEl ? selectEl.value : 'ALL';
-      loadObjectDataFromTiDB(activeObj, false);
-    }
-  }, 8000);
-}
-
 </script>
 @endsection
