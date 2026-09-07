@@ -168,17 +168,17 @@
 
       <div class="param-pill" title="Lama delay transisi lift antar baris (detik)">
         <label for="inputTransitionDelay">Delay:</label>
-        <input type="number" id="inputTransitionDelay" value="1.5" min="0" max="15" step="0.5" onchange="updateTransitionDelay(this.value)">
+        <input type="number" id="inputTransitionDelay" value="0.3" min="0" max="10" step="0.1" onchange="updateTransitionDelay(this.value)">
         <span style="font-size:10px;color:var(--text-muted);">s</span>
       </div>
 
       <div class="param-pill" title="Sampling acquisition rate">
         <label for="inputSamplingRate">Rate:</label>
         <select id="inputSamplingRate" onchange="updateSamplingInterval(this.value)">
-          <option value="1000" selected>1.0 Hz (1s)</option>
+          <option value="100" selected>10.0 Hz (Fast / 100ms)</option>
+          <option value="200">5.0 Hz (200ms)</option>
           <option value="500">2.0 Hz (500ms)</option>
-          <option value="2000">0.5 Hz (2s)</option>
-          <option value="100">10.0 Hz (Fast)</option>
+          <option value="1000">1.0 Hz (1.0s)</option>
         </select>
       </div>
 
@@ -534,7 +534,7 @@
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             Delay Transisi (Detik)
           </label>
-          <input type="number" id="modalInputTransitionDelay" class="modal-num-input" value="1.5" min="0" max="15" step="0.5">
+          <input type="number" id="modalInputTransitionDelay" class="modal-num-input" value="0.3" min="0" max="10" step="0.1">
           <span class="modal-help">Jeda lift pindah baris</span>
         </div>
       </div>
@@ -562,10 +562,10 @@
         <div class="modal-form-group">
           <label class="modal-label">Sampling Interval</label>
           <select id="modalInputSamplingRate" class="modal-select-input">
-            <option value="1000" selected>1.0 Hz (1.0s / sample)</option>
-            <option value="500">2.0 Hz (500ms / sample)</option>
-            <option value="2000">0.5 Hz (2.0s / sample)</option>
-            <option value="100">10.0 Hz (100ms Fast)</option>
+            <option value="100" selected>10.0 Hz (100ms Fast / Responsif)</option>
+            <option value="200">5.0 Hz (200ms)</option>
+            <option value="500">2.0 Hz (500ms)</option>
+            <option value="1000">1.0 Hz (1.0s / sample)</option>
           </select>
         </div>
       </div>
@@ -606,12 +606,12 @@ const APP_STATE = {
   objectName: 'Gentong',
   totalLoops: 1,
   currentLoop: 1,
-  transitionDelay: 1.5,
+  transitionDelay: 0.3,
   sessionId: '',
   sessionRecords: [], // Holds all individual loop/height records
   saveState: 'idle', // 'idle' | 'scanning' | 'ready' | 'saved'
   isTransitioning: false,
-  samplingIntervalMs: 1000,
+  samplingIntervalMs: 100,
   hotspotThreshold: 100,
   isScanning: false,
   isPaused: false,
@@ -1336,9 +1336,13 @@ function updateIndividualChannelsVisual(full72) {
 // 12. SCANNING ENGINE & LIVE DATA GENERATION
 function generateDummyModuleData(moduleId, isHotspot) {
   const data = [];
+  const nameLower = (APP_STATE.objectName || '').toLowerCase();
+  const isGentongLimbah = nameLower.includes('limbah') || nameLower.includes('demo');
+  const maxCap = isGentongLimbah ? 35 : 750;
+
   for (let ch = 0; ch < 24; ch++) {
-    let base = Math.floor(Math.random() * 25) + 18;
-    if (isHotspot && moduleId === 2) {
+    let base = isGentongLimbah ? (Math.floor(Math.random() * 15) + 15) : (Math.floor(Math.random() * 25) + 18);
+    if (isHotspot && moduleId === 2 && !isGentongLimbah) {
       const dist = Math.abs(ch - 14); // peak at XS2 ch 14 (D38)
       if (dist <= 5) {
         const boost = Math.floor((Math.random() * 140 + 160) * Math.max(0.2, (1 - dist / 6)));
@@ -1346,10 +1350,10 @@ function generateDummyModuleData(moduleId, isHotspot) {
       } else {
         base += Math.floor(Math.random() * 35) + 20;
       }
-    } else if (isHotspot && (moduleId === 1 && ch > 18 || moduleId === 3 && ch < 6)) {
+    } else if (isHotspot && !isGentongLimbah && (moduleId === 1 && ch > 18 || moduleId === 3 && ch < 6)) {
       base += Math.floor(Math.random() * 30) + 10;
     }
-    data.push(base);
+    data.push(Math.min(maxCap, base));
   }
   return data;
 }
@@ -1380,9 +1384,9 @@ function openStartScanModal() {
   if (nameInput) nameInput.value = activeName;
   if (stepsInput) stepsInput.value = APP_STATE.totalHeights || 10;
   if (loopsInput) loopsInput.value = APP_STATE.totalLoops || 1;
-  if (delayInput) delayInput.value = APP_STATE.transitionDelay || 1.5;
+  if (delayInput) delayInput.value = (APP_STATE.transitionDelay !== undefined) ? APP_STATE.transitionDelay : 0.3;
   if (portInput) portInput.value = APP_STATE.selectedComPort || 'COM5';
-  if (rateInput) rateInput.value = APP_STATE.samplingIntervalMs || 1000;
+  if (rateInput) rateInput.value = APP_STATE.samplingIntervalMs || 100;
 
   // Highlight matching preset tag if any
   document.querySelectorAll('#modalPresetTagList .preset-tag').forEach(tag => {
@@ -1420,9 +1424,9 @@ function launchConfiguredScan() {
   const objName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : 'Gentong';
   const steps = (stepsInput && parseInt(stepsInput.value)) ? Math.max(1, parseInt(stepsInput.value)) : 10;
   const loops = (loopsInput && parseInt(loopsInput.value)) ? Math.max(1, parseInt(loopsInput.value)) : 1;
-  const transDelay = (delayInput && !isNaN(parseFloat(delayInput.value))) ? Math.max(0, parseFloat(delayInput.value)) : 1.5;
+  const transDelay = (delayInput && !isNaN(parseFloat(delayInput.value))) ? Math.max(0, parseFloat(delayInput.value)) : 0.3;
   const port = (portInput && portInput.value) ? portInput.value : 'COM5';
-  const rate = (rateInput && parseInt(rateInput.value)) ? parseInt(rateInput.value) : 1000;
+  const rate = (rateInput && parseInt(rateInput.value)) ? parseInt(rateInput.value) : 100;
 
   APP_STATE.objectName = objName;
   APP_STATE.totalHeights = steps;
@@ -1632,6 +1636,7 @@ function startScanning(fromModal = false) {
     document.getElementById('btnPauseScan').classList.remove('btn-start');
     document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
     logTerminal('<span class="log-badge-ok">[RESUMED]</span> Scanning sequence continued.');
+    executeScanCycle();
   } else {
     if (!fromModal) {
       openStartScanModal();
@@ -1660,7 +1665,7 @@ function startScanning(fromModal = false) {
     document.getElementById('headerHeightProgress').textContent = `1 / ${APP_STATE.totalHeights}`;
     document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
 
-    logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops | Delay Transisi: ${APP_STATE.transitionDelay}s`);
+    logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops | Sampling: ${APP_STATE.samplingIntervalMs}ms | Delay: ${APP_STATE.transitionDelay}s`);
   }
 
   // Start Elapsed Timer
@@ -1675,6 +1680,7 @@ function startScanning(fromModal = false) {
   }, 1000);
 
   // Trigger first cycle immediately then set interval
+  clearTimeout(APP_STATE.scanIntervalId);
   clearInterval(APP_STATE.scanIntervalId);
   executeScanCycle();
 }
@@ -1793,6 +1799,7 @@ function executeScanCycle() {
   if (l < APP_STATE.totalLoops) {
     // Next loop on the same height
     APP_STATE.currentLoop++;
+    clearTimeout(APP_STATE.scanIntervalId);
     APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
   } else {
     // Current height finished all loops
@@ -1807,6 +1814,7 @@ function executeScanCycle() {
 
         logTerminal(`<span class="log-badge-warn">[TRANSISI LIFT]</span> Selesai baris ${h} (${APP_STATE.totalLoops} loop). Menunggu jeda transisi lift ${APP_STATE.transitionDelay}s sebelum baris ${h+1}...`);
 
+        clearTimeout(APP_STATE.scanIntervalId);
         APP_STATE.scanIntervalId = setTimeout(() => {
           APP_STATE.isTransitioning = false;
           if (transChip) transChip.style.display = 'none';
@@ -1817,6 +1825,7 @@ function executeScanCycle() {
       } else {
         APP_STATE.currentHeight = h + 1;
         APP_STATE.currentLoop = 1;
+        clearTimeout(APP_STATE.scanIntervalId);
         APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
       }
     } else {
@@ -1861,6 +1870,9 @@ function stopScanning(isCompleted = false) {
   document.getElementById('btnStopScan').disabled = true;
   document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
   document.getElementById('btnPauseScan').classList.remove('btn-start');
+
+  document.getElementById('headerHeightProgress').textContent = `${APP_STATE.totalHeights} / ${APP_STATE.totalHeights}`;
+  document.getElementById('headerLoopProgress').textContent = `${APP_STATE.totalLoops} / ${APP_STATE.totalLoops}`;
 
   if (APP_STATE.sessionRecords.length > 0) {
     // Tombol Simpan berubah menjadi HIJAU & UNLOCKED
