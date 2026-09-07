@@ -27,6 +27,17 @@
 
     <!-- HUD Status Chips & Modules -->
     <div class="header-hud-bar">
+      <!-- Objek Target Chip -->
+      <div class="hud-chip object-chip" id="hudObjectChip" title="Identitas objek benda yang sedang di-scan">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="color:#A78BFA;flex-shrink:0;">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+        <span>OBJEK:</span>
+        <strong id="headerObjectName" style="color:#C4B5FD;font-weight:700;">Gentong</strong>
+      </div>
+
       <!-- Timestamp & Last Sync Chip -->
       <div class="hud-chip sync-chip" id="hudSyncChip" title="Waktu rekaman data terakhir dari TiDB Cloud / Firebase">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="color:#F59E0B;flex-shrink:0;">
@@ -60,11 +71,16 @@
       <div class="hud-chip">
         <span>PORT:</span> <strong id="headerComPort">COM5</strong>
       </div>
-      <div class="hud-chip">
-        <span>BAUD:</span> <strong id="headerBaudrate">115200</strong>
-      </div>
       <div class="hud-chip progress-chip">
         <span>Z-STEP:</span> <strong id="headerHeightProgress">0 / 10</strong>
+      </div>
+      <div class="hud-chip loop-chip" id="hudLoopChip" title="Iterasi loop pemindaian per baris">
+        <span>LOOP:</span> <strong id="headerLoopProgress" style="color:#7DD3FC;">1 / 1</strong>
+      </div>
+      <!-- Transition Status Chip -->
+      <div class="hud-chip transition-chip" id="hudTransitionChip" style="display:none;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#FBBF24;" title="Proses delay transisi perpindahan baris">
+        <span class="transition-spinner"></span>
+        <strong id="headerTransitionText">Transisi Lift (1.5s)...</strong>
       </div>
     </div>
   </header>
@@ -74,7 +90,7 @@
        ======================================================================== -->
   <div class="control-deck">
     <div class="command-btn-group">
-      <button class="btn-action btn-start" id="btnStartScan" onclick="startScanning()">
+      <button class="btn-action btn-start" id="btnStartScan" onclick="openStartScanModal()">
         <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         <span>START SCAN</span>
       </button>
@@ -86,6 +102,17 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
         <span>RESET</span>
       </button>
+
+      <!-- TOMBOL SIMPAN HASIL SCAN (KUNING SAAT SCAN -> HIJAU SAAT BERES/STOP) -->
+      <button class="btn-action btn-save-session btn-save-idle" id="btnSaveSession" onclick="saveScanSession()" disabled title="Simpan seluruh hasil scan ke database TiDB Cloud">
+        <svg id="saveBtnIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+        <span id="saveBtnLabel">SIMPAN HASIL</span>
+      </button>
+
       <button class="btn-action btn-outline" id="btnForceExport" onclick="exportMatrixCsv()" title="Export acquired scan matrix to CSV">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         <span>CSV</span>
@@ -121,6 +148,17 @@
         <input type="number" id="inputTotalHeight" value="10" min="1" max="50" onchange="updateTotalHeights(this.value)">
       </div>
 
+      <div class="param-pill" title="Jumlah loop per baris scan">
+        <label for="inputTotalLoops">Loops:</label>
+        <input type="number" id="inputTotalLoops" value="1" min="1" max="20" onchange="updateTotalLoops(this.value)">
+      </div>
+
+      <div class="param-pill" title="Lama delay transisi lift antar baris (detik)">
+        <label for="inputTransitionDelay">Delay:</label>
+        <input type="number" id="inputTransitionDelay" value="1.5" min="0" max="15" step="0.5" onchange="updateTransitionDelay(this.value)">
+        <span style="font-size:10px;color:var(--text-muted);">s</span>
+      </div>
+
       <div class="param-pill" title="Sampling acquisition rate">
         <label for="inputSamplingRate">Rate:</label>
         <select id="inputSamplingRate" onchange="updateSamplingInterval(this.value)">
@@ -128,18 +166,6 @@
           <option value="500">2.0 Hz (500ms)</option>
           <option value="2000">0.5 Hz (2s)</option>
           <option value="100">10.0 Hz (Fast)</option>
-        </select>
-      </div>
-
-      <div class="param-pill" title="RS485 Modbus baudrate">
-        <label for="inputBaudrate">Baud:</label>
-        <select id="inputBaudrate" onchange="updateBaudrate(this.value)">
-          <option value="115200" selected>115200</option>
-          <option value="9600">9600</option>
-          <option value="19200">19200</option>
-          <option value="38400">38400</option>
-          <option value="57600">57600</option>
-          <option value="230400">230400</option>
         </select>
       </div>
 
@@ -494,6 +520,123 @@
     </main>
   </div>
 </div>
+
+<!-- ========================================================================
+     MODAL: KONFIGURASI START SCAN & IDENTITAS OBJEK
+     ======================================================================== -->
+<div class="scan-modal-backdrop" id="modalStartScanConfig" style="display:none;" onclick="if(event.target===this) closeStartScanModal()">
+  <div class="scan-modal-card glassmorphism-card animate-scale-up">
+    <div class="scan-modal-header">
+      <div class="scan-modal-title-wrap">
+        <div class="scan-modal-icon-badge">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/>
+          </svg>
+        </div>
+        <div>
+          <h3>Konfigurasi Pemindaian Objek Baru</h3>
+          <p class="scan-modal-sub">Atur identitas target objek, ketinggian scan, multi-loop, dan delay transisi lift.</p>
+        </div>
+      </div>
+      <button class="scan-modal-close" onclick="closeStartScanModal()" title="Tutup">&times;</button>
+    </div>
+
+    <div class="scan-modal-body">
+      <!-- 1. Identitas Objek -->
+      <div class="modal-form-group">
+        <label class="modal-label">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+          Nama / Identitas Objek Target <span class="req-star">*</span>
+        </label>
+        <input type="text" id="modalInputObjectName" class="modal-text-input" value="Gentong" placeholder="Misal: Gentong Limbah A, Tong Reaktor 01, Drum Silinder...">
+        
+        <!-- Preset Tag Suggestions -->
+        <div class="preset-tag-list">
+          <span class="preset-tag" onclick="selectObjectPreset('Gentong')">Gentong</span>
+          <span class="preset-tag" onclick="selectObjectPreset('Gentong Limbah A')">Gentong Limbah A</span>
+          <span class="preset-tag" onclick="selectObjectPreset('Tong Reaktor 01')">Tong Reaktor 01</span>
+          <span class="preset-tag" onclick="selectObjectPreset('Drum Silinder B')">Drum Silinder B</span>
+          <span class="preset-tag" onclick="selectObjectPreset('Tabung Isotop 03')">Tabung Isotop 03</span>
+          <span class="preset-tag" onclick="selectObjectPreset('Pipa Limbah Radiasi')">Pipa Limbah Radiasi</span>
+        </div>
+      </div>
+
+      <!-- 2. Grid Parameters: Steps, Loops, Delay -->
+      <div class="modal-grid-3">
+        <div class="modal-form-group">
+          <label class="modal-label" for="modalInputSteps">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/></svg>
+            Jumlah Blok / Steps
+          </label>
+          <input type="number" id="modalInputSteps" class="modal-num-input" value="10" min="1" max="50">
+          <span class="modal-help">Level elevasi (Z-axis)</span>
+        </div>
+
+        <div class="modal-form-group">
+          <label class="modal-label" for="modalInputLoops">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Loop per Baris
+          </label>
+          <input type="number" id="modalInputLoops" class="modal-num-input" value="1" min="1" max="20">
+          <span class="modal-help">Pengulangan per baris</span>
+        </div>
+
+        <div class="modal-form-group">
+          <label class="modal-label" for="modalInputTransitionDelay">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Delay Transisi (Detik)
+          </label>
+          <input type="number" id="modalInputTransitionDelay" class="modal-num-input" value="1.5" min="0" max="15" step="0.5">
+          <span class="modal-help">Jeda lift pindah baris</span>
+        </div>
+      </div>
+
+      <!-- 3. Port & Sampling Rate in Modal -->
+      <div class="modal-grid-2">
+        <div class="modal-form-group">
+          <label class="modal-label">Port Serial / COM</label>
+          <select id="modalInputComPort" class="modal-select-input">
+            <option value="COM1">COM1</option>
+            <option value="COM2">COM2</option>
+            <option value="COM3">COM3</option>
+            <option value="COM4">COM4</option>
+            <option value="COM5" selected>COM5</option>
+            <option value="COM6">COM6</option>
+            <option value="COM7">COM7</option>
+            <option value="COM8">COM8</option>
+            <option value="COM9">COM9</option>
+            <option value="COM10">COM10</option>
+            <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
+            <option value="/dev/ttyACM0">/dev/ttyACM0</option>
+          </select>
+        </div>
+
+        <div class="modal-form-group">
+          <label class="modal-label">Sampling Interval</label>
+          <select id="modalInputSamplingRate" class="modal-select-input">
+            <option value="1000" selected>1.0 Hz (1.0s / sample)</option>
+            <option value="500">2.0 Hz (500ms / sample)</option>
+            <option value="2000">0.5 Hz (2.0s / sample)</option>
+            <option value="100">10.0 Hz (100ms Fast)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="scan-modal-footer">
+      <button class="btn-modal-cancel" onclick="closeStartScanModal()">Batal</button>
+      <button class="btn-modal-launch" onclick="launchConfiguredScan()">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <span>Mulai Pemindaian</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================================================
+     FLOATING TOAST / NOTIFICATION CONTAINER
+     ======================================================================== -->
+<div class="toast-notification-container" id="toastNotificationContainer"></div>
 @endsection
 
 @section('scripts')
@@ -512,6 +655,14 @@ const APP_STATE = {
   selectedBaudrate: 115200,
   totalHeights: 10,
   currentHeight: 0,
+  objectName: 'Gentong',
+  totalLoops: 1,
+  currentLoop: 1,
+  transitionDelay: 1.5,
+  sessionId: '',
+  sessionRecords: [], // Holds all individual loop/height records
+  saveState: 'idle', // 'idle' | 'scanning' | 'ready' | 'saved'
+  isTransitioning: false,
   samplingIntervalMs: 1000,
   hotspotThreshold: 100,
   isScanning: false,
@@ -1255,7 +1406,249 @@ function generateDummyModuleData(moduleId, isHotspot) {
   return data;
 }
 
-function startScanning() {
+// ==========================================
+// 12. MODAL DIALOG & CONFIGURATION HANDLERS
+// ==========================================
+function openStartScanModal() {
+  if (APP_STATE.isScanning && !APP_STATE.isPaused) return;
+
+  if (APP_STATE.isPaused) {
+    pauseScanning();
+    return;
+  }
+
+  // Pre-fill modal inputs
+  const nameInput = document.getElementById('modalInputObjectName');
+  const stepsInput = document.getElementById('modalInputSteps');
+  const loopsInput = document.getElementById('modalInputLoops');
+  const delayInput = document.getElementById('modalInputTransitionDelay');
+  const portInput = document.getElementById('modalInputComPort');
+  const rateInput = document.getElementById('modalInputSamplingRate');
+
+  if (nameInput) nameInput.value = APP_STATE.objectName || 'Gentong';
+  if (stepsInput) stepsInput.value = APP_STATE.totalHeights || 10;
+  if (loopsInput) loopsInput.value = APP_STATE.totalLoops || 1;
+  if (delayInput) delayInput.value = APP_STATE.transitionDelay || 1.5;
+  if (portInput) portInput.value = APP_STATE.selectedComPort || 'COM5';
+  if (rateInput) rateInput.value = APP_STATE.samplingIntervalMs || 1000;
+
+  const modal = document.getElementById('modalStartScanConfig');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeStartScanModal() {
+  const modal = document.getElementById('modalStartScanConfig');
+  if (modal) modal.style.display = 'none';
+}
+
+function selectObjectPreset(name) {
+  const input = document.getElementById('modalInputObjectName');
+  if (input) input.value = name;
+}
+
+function launchConfiguredScan() {
+  const nameInput = document.getElementById('modalInputObjectName');
+  const stepsInput = document.getElementById('modalInputSteps');
+  const loopsInput = document.getElementById('modalInputLoops');
+  const delayInput = document.getElementById('modalInputTransitionDelay');
+  const portInput = document.getElementById('modalInputComPort');
+  const rateInput = document.getElementById('modalInputSamplingRate');
+
+  const objName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : 'Gentong';
+  const steps = (stepsInput && parseInt(stepsInput.value)) ? Math.max(1, parseInt(stepsInput.value)) : 10;
+  const loops = (loopsInput && parseInt(loopsInput.value)) ? Math.max(1, parseInt(loopsInput.value)) : 1;
+  const transDelay = (delayInput && !isNaN(parseFloat(delayInput.value))) ? Math.max(0, parseFloat(delayInput.value)) : 1.5;
+  const port = (portInput && portInput.value) ? portInput.value : 'COM5';
+  const rate = (rateInput && parseInt(rateInput.value)) ? parseInt(rateInput.value) : 1000;
+
+  APP_STATE.objectName = objName;
+  APP_STATE.totalHeights = steps;
+  APP_STATE.totalLoops = loops;
+  APP_STATE.transitionDelay = transDelay;
+  APP_STATE.selectedComPort = port;
+  APP_STATE.samplingIntervalMs = rate;
+
+  closeStartScanModal();
+
+  // Update HUD displays
+  const elObj = document.getElementById('headerObjectName');
+  if (elObj) elObj.textContent = objName;
+  const elHeight = document.getElementById('headerHeightProgress');
+  if (elHeight) elHeight.textContent = `0 / ${steps}`;
+  const elLoop = document.getElementById('headerLoopProgress');
+  if (elLoop) elLoop.textContent = `1 / ${loops}`;
+  const elPort = document.getElementById('headerComPort');
+  if (elPort) elPort.textContent = port;
+
+  // Sync Quick Inputs
+  const qSteps = document.getElementById('inputTotalHeight');
+  if (qSteps) qSteps.value = steps;
+  const qLoops = document.getElementById('inputTotalLoops');
+  if (qLoops) qLoops.value = loops;
+  const qDelay = document.getElementById('inputTransitionDelay');
+  if (qDelay) qDelay.value = transDelay;
+  const qPort = document.getElementById('inputComPort');
+  if (qPort) qPort.value = port;
+  const qRate = document.getElementById('inputSamplingRate');
+  if (qRate) qRate.value = rate;
+
+  buildSidebarLoopList();
+
+  // Start actual acquisition
+  startScanning(true);
+}
+
+// ==========================================
+// 13. DYNAMIC SAVE BUTTON & TOAST NOTIFICATIONS
+// ==========================================
+function setSaveButtonState(state) {
+  APP_STATE.saveState = state;
+  const btn = document.getElementById('btnSaveSession');
+  const label = document.getElementById('saveBtnLabel');
+  const icon = document.getElementById('saveBtnIcon');
+  if (!btn || !label) return;
+
+  btn.classList.remove('btn-save-idle', 'btn-save-scanning', 'btn-save-ready', 'btn-save-saved');
+
+  if (state === 'scanning') {
+    btn.classList.add('btn-save-scanning');
+    btn.disabled = true;
+    label.textContent = 'SCANNING... (TERKUNCI)';
+    if (icon) {
+      icon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path>';
+    }
+  } else if (state === 'ready') {
+    btn.classList.add('btn-save-ready');
+    btn.disabled = false;
+    label.textContent = 'SIMPAN HASIL SCAN';
+    if (icon) {
+      icon.innerHTML = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>';
+    }
+  } else if (state === 'saved') {
+    btn.classList.add('btn-save-saved');
+    btn.disabled = true;
+    label.textContent = 'HASIL TERSIMPAN';
+    if (icon) {
+      icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+    }
+  } else {
+    // idle
+    btn.classList.add('btn-save-idle');
+    btn.disabled = true;
+    label.textContent = 'SIMPAN HASIL';
+    if (icon) {
+      icon.innerHTML = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>';
+    }
+  }
+}
+
+function showToast(type, title, message, showSaveAction = false) {
+  const container = document.getElementById('toastNotificationContainer');
+  if (!container) return;
+
+  const toastId = 'toast_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  const toast = document.createElement('div');
+  toast.className = `toast-card toast-${type}`;
+  toast.id = toastId;
+
+  let iconSvg = '';
+  if (type === 'success') {
+    iconSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
+  } else if (type === 'warning') {
+    iconSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  } else {
+    iconSvg = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>';
+  }
+
+  let actionsHtml = '';
+  if (showSaveAction && APP_STATE.saveState === 'ready') {
+    actionsHtml = `
+      <div class="toast-actions">
+        <button class="btn-toast-primary" onclick="saveScanSession(); removeToast('${toastId}')">💾 Simpan Sekarang</button>
+        <button class="btn-toast-secondary" onclick="removeToast('${toastId}')">Nanti</button>
+      </div>
+    `;
+  }
+
+  toast.innerHTML = `
+    <div class="toast-icon">${iconSvg}</div>
+    <div class="toast-content">
+      <div class="toast-title">${title}</div>
+      <div class="toast-desc">${message}</div>
+      ${actionsHtml}
+    </div>
+    <button class="toast-close" onclick="removeToast('${toastId}')">&times;</button>
+  `;
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    removeToast(toastId);
+  }, 9000);
+}
+
+function removeToast(toastId) {
+  const el = document.getElementById(toastId);
+  if (el) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateX(40px) scale(0.9)';
+    setTimeout(() => {
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }, 250);
+  }
+}
+
+function saveScanSession() {
+  if (APP_STATE.sessionRecords.length === 0) {
+    showToast('warning', 'Data Kosong', 'Tidak ada rekaman data pemindaian untuk disimpan.');
+    return;
+  }
+
+  const btn = document.getElementById('btnSaveSession');
+  const label = document.getElementById('saveBtnLabel');
+  if (btn) btn.disabled = true;
+  if (label) label.textContent = 'MENYIMPAN...';
+
+  const payload = {
+    object_name: APP_STATE.objectName,
+    session_id: APP_STATE.sessionId,
+    total_loops: APP_STATE.totalLoops,
+    transition_delay: APP_STATE.transitionDelay,
+    records: APP_STATE.sessionRecords
+  };
+
+  fetch('/api/matrix/save-session', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': '{{ csrf_token() }}'
+    },
+    body: JSON.stringify(payload)
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.status === 'success') {
+      setSaveButtonState('saved');
+      logTerminal(`<span class="log-badge-ok">[DB SAVE]</span> Sesi objek <strong>'${APP_STATE.objectName}'</strong> (${data.count} baris) berhasil disimpan ke <strong>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'SQLite'}</strong>!`);
+      showToast('success', 'Penyimpanan Berhasil!', `Data pemindaian <b>${APP_STATE.objectName}</b> (${data.count} record) berhasil disimpan ke <b>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>!`);
+      updateTimestampDisplay(new Date().toLocaleTimeString(), data.db_target === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
+      fetchInitialHistory();
+    } else {
+      setSaveButtonState('ready');
+      showToast('warning', 'Gagal Menyimpan', data.message || 'Terjadi kesalahan saat menyimpan ke database.');
+    }
+  })
+  .catch(err => {
+    console.error('[Save Session Error]', err);
+    setSaveButtonState('ready');
+    showToast('warning', 'Koneksi Terputus', 'Gagal mengirim data ke server. Silakan coba lagi.');
+  });
+}
+
+// ==========================================
+// 14. SCANNING ENGINE WITH MULTI-LOOP & TRANSITION DELAY
+// ==========================================
+function startScanning(fromModal = false) {
   if (APP_STATE.isScanning && !APP_STATE.isPaused) return;
 
   if (APP_STATE.isPaused) {
@@ -1264,20 +1657,34 @@ function startScanning() {
     document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
     logTerminal('<span class="log-badge-ok">[RESUMED]</span> Scanning sequence continued.');
   } else {
+    if (!fromModal) {
+      openStartScanModal();
+      return;
+    }
+
     APP_STATE.isScanning = true;
-    APP_STATE.currentHeight = 0;
+    APP_STATE.currentHeight = 1;
+    APP_STATE.currentLoop = 1;
     APP_STATE.matrixData = [];
+    APP_STATE.sessionRecords = [];
     APP_STATE.xs1History = [];
     APP_STATE.xs2History = [];
     APP_STATE.xs3History = [];
     APP_STATE.timestamps = [];
     APP_STATE.elapsedSeconds = 0;
+    APP_STATE.isTransitioning = false;
+    APP_STATE.sessionId = 'SES_' + new Date().toISOString().replace(/\D/g, '').substring(0, 14) + '_' + Math.floor(Math.random() * 900 + 100);
+
+    // Save button turns YELLOW & LOCKED
+    setSaveButtonState('scanning');
 
     document.getElementById('btnStartScan').disabled = true;
     document.getElementById('btnPauseScan').disabled = false;
     document.getElementById('btnStopScan').disabled = false;
+    document.getElementById('headerHeightProgress').textContent = `1 / ${APP_STATE.totalHeights}`;
+    document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
 
-    logTerminal('<span class="log-badge-ok">[SCAN]</span> 72-Ch Matrix acquisition started.');
+    logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops | Delay Transisi: ${APP_STATE.transitionDelay}s`);
   }
 
   // Start Elapsed Timer
@@ -1291,16 +1698,16 @@ function startScanning() {
     }
   }, 1000);
 
-  // Scanning Interval Cycle
+  // Trigger first cycle immediately then set interval
   clearInterval(APP_STATE.scanIntervalId);
-  APP_STATE.scanIntervalId = setInterval(executeScanCycle, APP_STATE.samplingIntervalMs);
+  executeScanCycle();
 }
 
 function executeScanCycle() {
-  if (APP_STATE.isPaused) return;
+  if (!APP_STATE.isScanning || APP_STATE.isPaused || APP_STATE.isTransitioning) return;
 
-  APP_STATE.currentHeight++;
   const h = APP_STATE.currentHeight;
+  const l = APP_STATE.currentLoop;
 
   if (h > APP_STATE.totalHeights) {
     stopScanning(true);
@@ -1313,7 +1720,12 @@ function executeScanCycle() {
   const d3 = generateDummyModuleData(3, hasAnomaly);
   const full72 = [...d1, ...d2, ...d3];
 
-  APP_STATE.matrixData.push(full72);
+  // Update heatmap matrix representation
+  if (APP_STATE.matrixData.length < h) {
+    APP_STATE.matrixData.push(full72);
+  } else {
+    APP_STATE.matrixData[h - 1] = full72;
+  }
 
   // Compute Averages
   const avg1 = d1.reduce((a, b) => a + b, 0) / 24;
@@ -1323,9 +1735,24 @@ function executeScanCycle() {
   const maxChannelIndex = full72.indexOf(maxCps) + 1;
   const totalCps = full72.reduce((a, b) => a + b, 0);
   const globalAvg = (totalCps / 72).toFixed(1);
+  const nowTs = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-  // Update UI Stats
+  // Store in sessionRecords for batch/single save
+  APP_STATE.sessionRecords.push({
+    timestamp: nowTs,
+    height: h,
+    loop_index: l,
+    detector_data: full72,
+    xs1_data: d1,
+    xs2_data: d2,
+    xs3_data: d3,
+    max_cps: maxCps,
+    avg_cps: parseFloat(globalAvg)
+  });
+
+  // Update UI Stats & HUD
   document.getElementById('headerHeightProgress').textContent = `${h} / ${APP_STATE.totalHeights}`;
+  document.getElementById('headerLoopProgress').textContent = `${l} / ${APP_STATE.totalLoops}`;
   document.getElementById('metricActiveLoop').innerHTML = `${h} <span class="kpi-unit">/ ${APP_STATE.totalHeights}</span>`;
   document.getElementById('metricMaxCps').innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
   document.getElementById('metricMaxChannel').textContent = `Detector D${maxChannelIndex} (XS${maxChannelIndex <= 24 ? 1 : (maxChannelIndex <= 48 ? 2 : 3)})`;
@@ -1366,11 +1793,11 @@ function executeScanCycle() {
 
   // Log to Terminal Screen
   const statusTag = maxCps >= APP_STATE.hotspotThreshold ? '<span class="log-badge-alert">[HOTSPOT]</span>' : '<span class="log-badge-ok">[NORMAL]</span>';
-  logTerminal(`[L:${h}/${APP_STATE.totalHeights}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
+  logTerminal(`[Tinggi:${h}/${APP_STATE.totalHeights} | Loop:${l}/${APP_STATE.totalLoops}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
 
   // Push to Firebase RTDB if active
   if (APP_STATE.useFirebase && firebaseDb) {
-    pushToFirebase(h, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
+    pushToFirebase(h, l, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
   }
 
   // Highlight Sidebar Loop item
@@ -1385,6 +1812,42 @@ function executeScanCycle() {
   render3DSourceViewport();
   renderTopViewXZ();
   updateRawTable();
+
+  // Schedule Next Step (Multi-loop or Transition Delay)
+  if (l < APP_STATE.totalLoops) {
+    // Next loop on the same height
+    APP_STATE.currentLoop++;
+    APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
+  } else {
+    // Current height finished all loops
+    if (h < APP_STATE.totalHeights) {
+      // Transition to next height step
+      if (APP_STATE.transitionDelay > 0) {
+        APP_STATE.isTransitioning = true;
+        const transChip = document.getElementById('hudTransitionChip');
+        const transText = document.getElementById('headerTransitionText');
+        if (transChip) transChip.style.display = 'inline-flex';
+        if (transText) transText.textContent = `Transisi Lift Baris ${h} ➔ ${h+1} (${APP_STATE.transitionDelay}s)...`;
+
+        logTerminal(`<span class="log-badge-warn">[TRANSISI LIFT]</span> Selesai baris ${h} (${APP_STATE.totalLoops} loop). Menunggu jeda transisi lift ${APP_STATE.transitionDelay}s sebelum baris ${h+1}...`);
+
+        APP_STATE.scanIntervalId = setTimeout(() => {
+          APP_STATE.isTransitioning = false;
+          if (transChip) transChip.style.display = 'none';
+          APP_STATE.currentHeight = h + 1;
+          APP_STATE.currentLoop = 1;
+          executeScanCycle();
+        }, APP_STATE.transitionDelay * 1000);
+      } else {
+        APP_STATE.currentHeight = h + 1;
+        APP_STATE.currentLoop = 1;
+        APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
+      }
+    } else {
+      // All heights and all loops completed!
+      stopScanning(true);
+    }
+  }
 }
 
 function pauseScanning() {
@@ -1402,14 +1865,20 @@ function pauseScanning() {
     label.textContent = 'PAUSE';
     btn.classList.remove('btn-start');
     logTerminal('<span class="log-badge-ok">[RESUMED]</span> Acquisition active.');
+    executeScanCycle();
   }
 }
 
 function stopScanning(isCompleted = false) {
+  clearTimeout(APP_STATE.scanIntervalId);
   clearInterval(APP_STATE.scanIntervalId);
   clearInterval(APP_STATE.timerIntervalId);
   APP_STATE.isScanning = false;
   APP_STATE.isPaused = false;
+  APP_STATE.isTransitioning = false;
+
+  const transChip = document.getElementById('hudTransitionChip');
+  if (transChip) transChip.style.display = 'none';
 
   document.getElementById('btnStartScan').disabled = false;
   document.getElementById('btnPauseScan').disabled = true;
@@ -1417,23 +1886,38 @@ function stopScanning(isCompleted = false) {
   document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
   document.getElementById('btnPauseScan').classList.remove('btn-start');
 
-  if (isCompleted) {
-    logTerminal('<span class="log-badge-ok">[COMPLETE]</span> Full scan matrix acquired.');
+  if (APP_STATE.sessionRecords.length > 0) {
+    // Tombol Simpan berubah menjadi HIJAU & UNLOCKED
+    setSaveButtonState('ready');
+
+    if (isCompleted) {
+      logTerminal(`<span class="log-badge-ok">[SELESAI]</span> Pemindaian target '<strong>${APP_STATE.objectName}</strong>' selesai (${APP_STATE.sessionRecords.length} record). Tombol simpan aktif (HIJAU).`);
+      showToast('success', 'Pemindaian Selesai!', `Pemindaian objek <b>${APP_STATE.objectName}</b> telah selesai (${APP_STATE.sessionRecords.length} record). Silakan klik <b>SIMPAN HASIL SCAN</b> untuk menyimpan ke database.`, true);
+    } else {
+      logTerminal(`<span class="log-badge-warn">[BERHENTI MANUAL]</span> Pemindaian dihentikan. (${APP_STATE.sessionRecords.length} record terkumpul). Tombol simpan aktif (HIJAU).`);
+      showToast('warning', 'Pemindaian Dihentikan', `Pemindaian objek <b>${APP_STATE.objectName}</b> dihentikan (${APP_STATE.sessionRecords.length} record). Anda dapat menyimpan data ini sekarang.`, true);
+    }
   } else {
+    setSaveButtonState('idle');
     logTerminal('<span class="log-badge-warn">[RESET]</span> Scanner state cleared.');
   }
 }
 
-// 13. FIREBASE REALTIME PUSH & SYNC
-function pushToFirebase(height, fullArray, d1, d2, d3, maxCps, maxCh, avgCps) {
+// 15. FIREBASE REALTIME PUSH & SYNC
+function pushToFirebase(height, loopIdx, fullArray, d1, d2, d3, maxCps, maxCh, avgCps) {
   const timestamp = new Date().toISOString();
   const startTime = Date.now();
 
   try {
     firebaseDb.ref('radiation_scans/latest').set({
       timestamp: timestamp,
+      object_name: APP_STATE.objectName,
+      session_id: APP_STATE.sessionId,
       current_height: height,
       total_height: APP_STATE.totalHeights,
+      current_loop: loopIdx,
+      total_loops: APP_STATE.totalLoops,
+      transition_delay: APP_STATE.transitionDelay,
       xs1_data: d1,
       xs2_data: d2,
       xs3_data: d3,
@@ -1445,11 +1929,22 @@ function pushToFirebase(height, fullArray, d1, d2, d3, maxCps, maxCh, avgCps) {
       status: maxCps >= APP_STATE.hotspotThreshold ? 'alert' : 'safe'
     }).then(() => {
       const latency = Date.now() - startTime;
-      document.getElementById('syncLatencyText').textContent = `${latency}ms`;
+      const elLatency = document.getElementById('syncLatencyText');
+      if (elLatency) elLatency.textContent = `${latency}ms`;
     });
   } catch (e) {
     console.warn("[Firebase Push Error]", e);
   }
+}
+
+function updateTotalLoops(val) {
+  APP_STATE.totalLoops = Math.max(1, parseInt(val) || 1);
+  const el = document.getElementById('headerLoopProgress');
+  if (el) el.textContent = `1 / ${APP_STATE.totalLoops}`;
+}
+
+function updateTransitionDelay(val) {
+  APP_STATE.transitionDelay = Math.max(0, parseFloat(val) || 1.5);
 }
 
 function toggleFirebaseSync() {
@@ -1882,6 +2377,14 @@ function fetchInitialHistory() {
         const timeStr = latest.timestamp || latest.created_at || 'Baru Saja';
         updateTimestampDisplay(timeStr, data.source === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
         
+        if (latest.object_name) {
+          const elObj = document.getElementById('headerObjectName');
+          if (elObj && !APP_STATE.isScanning) {
+            elObj.textContent = latest.object_name;
+            APP_STATE.objectName = latest.object_name;
+          }
+        }
+
         if (APP_STATE.matrixData.length === 0) {
           const matrixFromDb = [];
           const sorted = [...data.records].reverse();

@@ -41,6 +41,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/matrix', [MatrixController::class, 'index'])->name('matrix');
     Route::get('/dashboard', function() { return redirect()->route('matrix'); })->name('dashboard');
     Route::get('/api/matrix/history', [MatrixController::class, 'getHistory'])->name('matrix.history');
+    Route::post('/api/matrix/save-session', [MatrixController::class, 'saveSession'])->name('matrix.save_session');
     Route::get('/api/matrix/export-csv', [MatrixController::class, 'downloadCsv'])->name('matrix.export_csv');
     
     // User Profile
