@@ -1334,24 +1334,39 @@ body.matrix-body {
 }
 
 .kpi-tile.kpi-time .kpi-number {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.25;
+  font-size: 16px;
+  font-weight: 800;
   color: var(--text-primary);
-  word-break: break-word;
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.kpi-tile.kpi-time .kpi-number .kpi-unit {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent-amber);
 }
 
 .kpi-tile.kpi-time .kpi-subtext {
-  color: var(--accent-emerald);
-  font-weight: 600;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 html.light-mode .kpi-tile.kpi-time .kpi-number {
   color: #0f172a;
 }
 
+html.light-mode .kpi-tile.kpi-time .kpi-number .kpi-unit {
+  color: #b45309;
+}
+
 html.light-mode .kpi-tile.kpi-time .kpi-subtext {
-  color: #047857;
+  color: #475569;
 }
 
 .hud-chip.sync-chip {

@@ -443,10 +443,15 @@
           <div class="kpi-subtext">Base Radiation</div>
         </div>
 
-        <div class="kpi-tile kpi-time">
+        <div class="kpi-tile kpi-time" title="Waktu rekaman data terakhir di TiDB Cloud">
           <div class="kpi-header">Last DB Record</div>
-          <div class="kpi-number" id="metricLastTimestamp">--:--:--</div>
-          <div class="kpi-subtext" id="metricLastTimestampSub">TiDB Cloud Verified</div>
+          <div class="kpi-number" id="metricLastTimestamp">
+            <span id="metricLastTime">--:--:--</span>
+            <span class="kpi-unit" id="metricLastTz">WIB</span>
+          </div>
+          <div class="kpi-subtext" id="metricLastTimestampSub">
+            <span id="metricLastDate">-- --- ----</span> &bull; <strong style="color:var(--accent-emerald);">TiDB</strong>
+          </div>
         </div>
       </div>
 
@@ -1794,42 +1799,78 @@ document.addEventListener('DOMContentLoaded', () => {
   fetchInitialHistory();
 });
 
-function formatTimestampPretty(rawTime) {
-  if (!rawTime || rawTime === 'Memuat...' || rawTime === 'Belum ada data') return rawTime || '--:--:--';
-  
-  if (typeof rawTime === 'string') {
-    // If it contains T (e.g. 2026-09-07T02:48:50.941913Z)
-    if (rawTime.includes('T')) {
-      try {
-        const d = new Date(rawTime);
-        if (!isNaN(d.getTime())) {
-          const pad = (n) => String(n).padStart(2, '0');
-          const YYYY = d.getFullYear();
-          const MM = pad(d.getMonth() + 1);
-          const DD = pad(d.getDate());
-          const hh = pad(d.getHours());
-          const mm = pad(d.getMinutes());
-          const ss = pad(d.getSeconds());
-          return `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`;
-        }
-      } catch (e) {}
-      return rawTime.replace('T', ' ').split('.')[0].substring(0, 19);
-    }
-    // If already standard YYYY-MM-DD HH:MM:SS or similar
-    return rawTime.split('.')[0].substring(0, 19);
+function parseTimestampComponents(rawTime) {
+  if (!rawTime || rawTime === 'Memuat...' || rawTime === 'Belum ada data') {
+    return {
+      full: rawTime || '--:--:--',
+      time: '--:--:--',
+      date: 'No Record',
+      tz: 'WIB'
+    };
   }
-  return String(rawTime);
+
+  let d = null;
+  if (typeof rawTime === 'string') {
+    if (rawTime.includes('T')) {
+      d = new Date(rawTime);
+    } else if (rawTime.includes('-') && rawTime.includes(':')) {
+      const parts = rawTime.trim().split(' ');
+      if (parts.length === 2) {
+        const dateParts = parts[0].split('-');
+        const timePart = parts[1].split('.')[0];
+        if (dateParts.length === 3) {
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+          const mIdx = parseInt(dateParts[1], 10) - 1;
+          const mName = months[mIdx] || dateParts[1];
+          return {
+            full: `${parts[0]} ${timePart}`,
+            time: timePart,
+            date: `${dateParts[2]} ${mName} ${dateParts[0]}`,
+            tz: 'WIB'
+          };
+        }
+      }
+      d = new Date(rawTime.replace(' ', 'T'));
+    }
+  }
+
+  if (d && !isNaN(d.getTime())) {
+    const pad = (n) => String(n).padStart(2, '0');
+    const YYYY = d.getFullYear();
+    const MM = pad(d.getMonth() + 1);
+    const DD = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mm = pad(d.getMinutes());
+    const ss = pad(d.getSeconds());
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const mName = months[d.getMonth()] || MM;
+    return {
+      full: `${YYYY}-${MM}-${DD} ${hh}:${mm}:${ss}`,
+      time: `${hh}:${mm}:${ss}`,
+      date: `${DD} ${mName} ${YYYY}`,
+      tz: 'WIB'
+    };
+  }
+
+  return {
+    full: String(rawTime).substring(0, 19),
+    time: String(rawTime).substring(0, 8),
+    date: 'Recent',
+    tz: 'WIB'
+  };
 }
 
 function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
-  const formatted = formatTimestampPretty(timeStr);
+  const parts = parseTimestampComponents(timeStr);
   const elHeader = document.getElementById('headerLastSyncTime');
   const elBadge = document.getElementById('headerDbSourceBadge');
-  const elKpi = document.getElementById('metricLastTimestamp');
+  const elTime = document.getElementById('metricLastTime');
+  const elDate = document.getElementById('metricLastDate');
   
-  if (elHeader) elHeader.textContent = formatted;
+  if (elHeader) elHeader.textContent = parts.full;
   if (elBadge && sourceLabel) elBadge.textContent = sourceLabel;
-  if (elKpi) elKpi.textContent = formatted;
+  if (elTime) elTime.textContent = parts.time;
+  if (elDate) elDate.textContent = parts.date;
 }
 
 function fetchInitialHistory() {
