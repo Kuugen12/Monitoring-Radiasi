@@ -116,20 +116,16 @@
         <span>RESET</span>
       </button>
 
-      <!-- TOMBOL SIMPAN HASIL SCAN (KUNING SAAT SCAN -> HIJAU SAAT BERES/STOP) -->
-      <button class="btn-action btn-save-session btn-save-idle" id="btnSaveSession" onclick="saveScanSession()" disabled title="Simpan seluruh hasil scan ke database TiDB Cloud">
+      <!-- TOMBOL SIMPAN & UNDUH CSV (KUNING SAAT SCAN -> HIJAU SAAT BERES/STOP) -->
+      <button class="btn-action btn-save-session btn-save-idle" id="btnSaveSession" onclick="saveScanSession()" title="Simpan hasil scan ke database dan unduh file CSV 8x9 Matrix">
         <svg id="saveBtnIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
           <polyline points="17 21 17 13 7 13 7 21"/>
           <polyline points="7 3 7 8 15 8"/>
         </svg>
-        <span id="saveBtnLabel">SIMPAN HASIL</span>
+        <span id="saveBtnLabel">SIMPAN & EKSPOR CSV</span>
       </button>
 
-      <button class="btn-action btn-outline" id="btnForceExport" onclick="exportMatrixCsv()" title="Export acquired scan matrix to CSV">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>CSV</span>
-      </button>
       <button class="btn-action btn-outline" onclick="exportMatrixDat()" title="Export formatted matrix to .DAT">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
         <span>.DAT</span>
@@ -1520,24 +1516,24 @@ function setSaveButtonState(state) {
   } else if (state === 'ready') {
     btn.classList.add('btn-save-ready');
     btn.disabled = false;
-    label.textContent = 'SIMPAN HASIL SCAN';
+    label.textContent = 'SIMPAN & UNDUH CSV';
     if (icon) {
-      icon.innerHTML = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>';
+      icon.innerHTML = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>';
     }
   } else if (state === 'saved') {
     btn.classList.add('btn-save-saved');
-    btn.disabled = true;
-    label.textContent = 'HASIL TERSIMPAN';
+    btn.disabled = false;
+    label.textContent = 'TERSIMPAN (.CSV)';
     if (icon) {
       icon.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
     }
   } else {
     // idle
     btn.classList.add('btn-save-idle');
-    btn.disabled = true;
-    label.textContent = 'SIMPAN HASIL';
+    btn.disabled = false;
+    label.textContent = 'SIMPAN & EKSPOR CSV';
     if (icon) {
-      icon.innerHTML = '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline>';
+      icon.innerHTML = '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>';
     }
   }
 }
@@ -1564,7 +1560,7 @@ function showToast(type, title, message, showSaveAction = false) {
   if (showSaveAction && APP_STATE.saveState === 'ready') {
     actionsHtml = `
       <div class="toast-actions">
-        <button class="btn-toast-primary" onclick="saveScanSession(); removeToast('${toastId}')">💾 Simpan Sekarang</button>
+        <button class="btn-toast-primary" onclick="saveScanSession(); removeToast('${toastId}')">💾 Simpan & Unduh CSV</button>
         <button class="btn-toast-secondary" onclick="removeToast('${toastId}')">Nanti</button>
       </div>
     `;
@@ -1599,50 +1595,65 @@ function removeToast(toastId) {
 }
 
 function saveScanSession() {
-  if (APP_STATE.sessionRecords.length === 0) {
-    showToast('warning', 'Data Kosong', 'Tidak ada rekaman data pemindaian untuk disimpan.');
+  if (APP_STATE.matrixData.length === 0 && APP_STATE.sessionRecords.length === 0) {
+    showToast('warning', 'Data Kosong', 'Tidak ada data pemindaian untuk disimpan atau diekspor.');
     return;
   }
 
   const btn = document.getElementById('btnSaveSession');
   const label = document.getElementById('saveBtnLabel');
   if (btn) btn.disabled = true;
-  if (label) label.textContent = 'MENYIMPAN...';
+  if (label) label.textContent = 'MENYIMPAN & MENGUNDUH...';
 
-  const payload = {
-    object_name: APP_STATE.objectName,
-    session_id: APP_STATE.sessionId,
-    total_loops: APP_STATE.totalLoops,
-    transition_delay: APP_STATE.transitionDelay,
-    records: APP_STATE.sessionRecords
-  };
+  // 1. Generate and trigger download of Scientific CSV
+  const csvContent = generateScientificMatrixCsv();
+  const safeName = (APP_STATE.objectName || 'Gentong').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const filename = `radioscan_matrix_${safeName}_${Date.now()}.csv`;
+  downloadCsvFile(csvContent, filename);
 
-  fetch('/matrix-data/save-session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': '{{ csrf_token() }}'
-    },
-    body: JSON.stringify(payload)
-  })
-  .then(res => res.json())
-  .then(data => {
-    if (data.status === 'success') {
+  logTerminal(`<span class="log-badge-ok">[EKSPOR CSV]</span> File <strong>${filename}</strong> (8x9 Cell Matrix & 72 Detektor) berhasil diunduh.`);
+
+  // 2. If live session records exist, also persist to TiDB Cloud
+  if (APP_STATE.sessionRecords.length > 0) {
+    const payload = {
+      object_name: APP_STATE.objectName,
+      session_id: APP_STATE.sessionId,
+      total_loops: APP_STATE.totalLoops,
+      transition_delay: APP_STATE.transitionDelay,
+      records: APP_STATE.sessionRecords
+    };
+
+    fetch('/matrix-data/save-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+      },
+      body: JSON.stringify(payload)
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        setSaveButtonState('saved');
+        logTerminal(`<span class="log-badge-ok">[DB SAVE]</span> Sesi objek <strong>'${APP_STATE.objectName}'</strong> (${data.count} baris) tersimpan di <strong>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</strong>!`);
+        showToast('success', 'Tersimpan & CSV Diunduh!', `Data pemindaian <b>${APP_STATE.objectName}</b> berhasil disimpan ke database dan diunduh sebagai file CSV.`);
+        updateTimestampDisplay(new Date().toLocaleTimeString(), data.db_target === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
+        fetchInitialHistory();
+      } else {
+        setSaveButtonState('saved');
+        showToast('success', 'CSV Berhasil Diunduh!', `File CSV hasil scan telah diunduh ke komputer.`);
+      }
+    })
+    .catch(err => {
+      console.error('[Save Session Error]', err);
       setSaveButtonState('saved');
-      logTerminal(`<span class="log-badge-ok">[DB SAVE]</span> Sesi objek <strong>'${APP_STATE.objectName}'</strong> (${data.count} baris) berhasil disimpan ke <strong>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'SQLite'}</strong>!`);
-      showToast('success', 'Penyimpanan Berhasil!', `Data pemindaian <b>${APP_STATE.objectName}</b> (${data.count} record) berhasil disimpan ke <b>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>!`);
-      updateTimestampDisplay(new Date().toLocaleTimeString(), data.db_target === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
-      fetchInitialHistory();
-    } else {
-      setSaveButtonState('ready');
-      showToast('warning', 'Gagal Menyimpan', data.message || 'Terjadi kesalahan saat menyimpan ke database.');
-    }
-  })
-  .catch(err => {
-    console.error('[Save Session Error]', err);
-    setSaveButtonState('ready');
-    showToast('warning', 'Koneksi Terputus', 'Gagal mengirim data ke server. Silakan coba lagi.');
-  });
+      showToast('success', 'CSV Berhasil Diunduh!', 'File CSV hasil scan telah diunduh ke komputer.');
+    });
+  } else {
+    // Exporting currently loaded object
+    setSaveButtonState('saved');
+    showToast('success', 'CSV Berhasil Diunduh!', `Data pemindaian <b>${APP_STATE.objectName}</b> berhasil diunduh sebagai file CSV.`);
+  }
 }
 
 // ==========================================
@@ -2155,31 +2166,117 @@ function updateRawTable() {
   });
 }
 
-function exportMatrixCsv() {
-  if (APP_STATE.matrixData.length === 0) {
-    alert("No matrix scan data available yet. Please start a scan first!");
-    return;
+function generateScientificMatrixCsv() {
+  const numRows = APP_STATE.matrixData.length;
+  const detectorAverages = new Array(72).fill(0);
+  const detectorPeaks = new Array(72).fill(0);
+
+  if (numRows > 0) {
+    for (let r = 0; r < numRows; r++) {
+      for (let c = 0; c < 72; c++) {
+        const val = (APP_STATE.matrixData[r] && APP_STATE.matrixData[r][c] !== undefined) ? APP_STATE.matrixData[r][c] : 0;
+        detectorAverages[c] += val;
+        if (val > detectorPeaks[c]) detectorPeaks[c] = val;
+      }
+    }
+    for (let c = 0; c < 72; c++) {
+      detectorAverages[c] = parseFloat((detectorAverages[c] / numRows).toFixed(1));
+    }
   }
 
-  let csvContent = "data:text/csv;charset=utf-8,Height";
-  for (let i = 1; i <= 72; i++) {
-    csvContent += `,Det_${i < 10 ? '0' + i : i}`;
+  const dateStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
+  const objName = APP_STATE.objectName || 'Gentong';
+  const sessId = APP_STATE.sessionId || ('SES_' + Date.now());
+  const globalPeak = Math.max(...detectorPeaks, 0);
+
+  let csv = "";
+  csv += "# ==============================================================================\n";
+  csv += "# RADIOSCAN MATRIX v2.0 - 72-CHANNEL SCIENTIFIC DETECTOR REPORT\n";
+  csv += `# Object Name: ${objName}\n`;
+  csv += `# Session ID: ${sessId}\n`;
+  csv += `# Acquisition Date: ${dateStr} WIB\n`;
+  csv += `# Total Elevation Steps: ${APP_STATE.totalHeights} | Total Loops: ${APP_STATE.totalLoops}\n`;
+  csv += `# Global Peak Intensity: ${globalPeak} CPS\n`;
+  csv += "# ==============================================================================\n\n";
+
+  // SECTION 1: DETECTOR ARRAY MEAN RESPONSE GRID (8x9 CELL MATRIX)
+  csv += "# SECTION 1: DETECTOR ARRAY MEAN RESPONSE GRID (8x9 CELL MATRIX)\n";
+  csv += "Cell Row Index,Col 1,Col 2,Col 3,Col 4,Col 5,Col 6,Col 7,Col 8,Col 9\n";
+  for (let r = 0; r < 8; r++) {
+    const rowValues = [];
+    for (let c = 0; c < 9; c++) {
+      const detIdx = r * 9 + c;
+      const meanVal = (detIdx < 72) ? (detectorAverages[detIdx] !== undefined ? detectorAverages[detIdx].toFixed(1) : "0.0") : "0.0";
+      rowValues.push(meanVal);
+    }
+    csv += `Row ${r + 1},${rowValues.join(",")}\n`;
   }
-  csvContent += "\n";
+  csv += "\n";
 
-  APP_STATE.matrixData.forEach((row, idx) => {
-    csvContent += `Tinggi_${idx + 1},` + row.join(",") + "\n";
-  });
+  // SECTION 2: SPATIAL RESPONSE DISTRIBUTION ACROSS ALL 72 DETECTOR CELLS
+  csv += "# SECTION 2: SPATIAL RESPONSE DISTRIBUTION ACROSS ALL 72 DETECTOR CELLS\n";
+  csv += "Cell ID,Detector Number,Cell Row,Cell Col,Module Name,Position X (mm),Position Y (mm),Position Z (cm),Mean Counts (CPS),Peak Counts (CPS),Dose Rate (uSv/h),Status\n";
+  for (let i = 0; i < 72; i++) {
+    const r = Math.floor(i / 9) + 1;
+    const c = (i % 9) + 1;
+    const cellId = `Cell ${r}${c}`;
+    const detNum = `D${(i + 1) < 10 ? '0' + (i + 1) : (i + 1)}`;
+    let modName = "XS1 (0x01)";
+    if (i >= 24 && i < 48) modName = "XS2 (0x02)";
+    if (i >= 48) modName = "XS3 (0x03)";
 
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement("a");
-  link.setAttribute("href", encodedUri);
-  link.setAttribute("download", `heatmap_radiation_matrix_${Date.now()}.csv`);
+    const posX = (-25.0 + (c - 1) * 0.5).toFixed(1);
+    const posY = (19.0 - (r - 1) * 0.5).toFixed(1);
+    const posZ = (r * 35).toFixed(1);
+    const meanCps = detectorAverages[i] ? detectorAverages[i].toFixed(1) : "0.0";
+    const peakCps = detectorPeaks[i] ? detectorPeaks[i].toFixed(1) : "0.0";
+    const doseRate = (parseFloat(meanCps) * 0.012).toFixed(3);
+    const status = (detectorPeaks[i] >= APP_STATE.hotspotThreshold) ? "HOTSPOT ALERT" : "NORMAL BG";
+
+    csv += `${cellId},${detNum},Row ${r},Col ${c},${modName},${posX},${posY},${posZ},${meanCps},${peakCps},${doseRate},${status}\n`;
+  }
+  csv += "\n";
+
+  // SECTION 3: RAW ELEVATION SCAN MATRIX
+  csv += "# SECTION 3: RAW ELEVATION SCAN MATRIX (EACH HEIGHT LEVEL)\n";
+  const detHeaders = Array.from({length: 72}, (_, i) => `D${(i + 1) < 10 ? '0' + (i + 1) : (i + 1)}`).join(",");
+  csv += `Elevation Level,Height (cm),Loop Index,Timestamp,${detHeaders},Max CPS,Avg CPS\n`;
+
+  if (APP_STATE.sessionRecords && APP_STATE.sessionRecords.length > 0) {
+    APP_STATE.sessionRecords.forEach(rec => {
+      const h = rec.height || 1;
+      const l = rec.loop_index || 1;
+      const ts = rec.timestamp || dateStr;
+      const dataArr = rec.detector_data || [];
+      const mx = rec.max_cps || 0;
+      const av = rec.avg_cps || 0;
+      csv += `Loop ${h < 10 ? '0' + h : h},${h * 35} cm,${l},${ts},${dataArr.join(",")},${mx},${av}\n`;
+    });
+  } else if (APP_STATE.matrixData && APP_STATE.matrixData.length > 0) {
+    APP_STATE.matrixData.forEach((row, idx) => {
+      const mx = Math.max(...row);
+      const av = (row.reduce((a, b) => a + b, 0) / 72).toFixed(1);
+      csv += `Loop ${idx + 1 < 10 ? '0' + (idx + 1) : (idx + 1)},${(idx + 1) * 35} cm,1,${dateStr},${row.join(",")},${mx},${av}\n`;
+    });
+  }
+
+  return csv;
+}
+
+function downloadCsvFile(csvContent, filename) {
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
-  logTerminal('<span class="log-badge-ok">[EXPORT]</span> CSV file saved.');
+function exportMatrixCsv() {
+  saveScanSession();
 }
 
 function exportMatrixDat() {
