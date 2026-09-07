@@ -3,9 +3,16 @@
 @section('title', 'Dashboard — RadiaTrack')
 
 @section('content')
-  <div class="topbar">
-    <svg class="subicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-    <h1>Pantauan Radiasi</h1>
+  <div class="topbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <svg class="subicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      <h1>Pantauan Radiasi</h1>
+    </div>
+    <div class="dash-sync-badge" style="display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--border);padding:6px 14px;border-radius:20px;font-size:12px;">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#34D399;box-shadow:0 0 8px #34D399;"></span>
+      <span style="color:var(--muted);">Data Terakhir:</span>
+      <strong id="dashLastSyncTime" style="color:var(--text);font-family:var(--mono);">Memuat data...</strong>
+    </div>
   </div>
   <p class="page-sub">Pilih detektor untuk melihat grafik riwayat dan detail sensor.</p>
 
@@ -103,6 +110,12 @@
     detectorsRef.on('value', (snapshot) => {
       const data = snapshot.val();
       if (!data) return;
+
+      const now = new Date();
+      const timeStr = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + 
+                      now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+      const syncEl = document.getElementById('dashLastSyncTime');
+      if (syncEl) syncEl.textContent = timeStr;
 
       Object.keys(data).forEach((id) => {
         const detData = data[id];

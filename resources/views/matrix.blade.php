@@ -27,6 +27,16 @@
 
     <!-- HUD Status Chips & Modules -->
     <div class="header-hud-bar">
+      <!-- Timestamp & Last Sync Chip -->
+      <div class="hud-chip sync-chip" id="hudSyncChip" title="Waktu rekaman data terakhir dari TiDB Cloud / Firebase">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" style="color:#F59E0B;flex-shrink:0;">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>LAST DATA:</span>
+        <strong id="headerLastSyncTime" style="color:#60A5FA;font-family:var(--font-mono);letter-spacing:0.3px;">Memuat...</strong>
+        <span class="badge-db-live" id="headerDbSourceBadge" style="background:rgba(16,185,129,0.15);color:#34D399;font-size:9.5px;padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:0.3px;border:1px solid rgba(16,185,129,0.3);">TiDB CLOUD</span>
+      </div>
+
       <div class="hud-chip live-chip" id="liveStatusBadge">
         <span class="live-indicator-dot" id="livePulseDot"></span>
         <span id="liveStatusText">1.0 Hz</span>
@@ -431,6 +441,15 @@
           <div class="kpi-header">Background</div>
           <div class="kpi-number" id="metricBgCps">31.4 <span class="kpi-unit">cps</span></div>
           <div class="kpi-subtext">Base Radiation</div>
+        </div>
+
+        <div class="kpi-tile kpi-time" style="border-left:3px solid #F59E0B;">
+          <div class="kpi-header" style="color:#F59E0B;display:flex;align-items:center;gap:4px;">
+            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Last DB Record
+          </div>
+          <div class="kpi-number" id="metricLastTimestamp" style="font-size:13px;font-weight:700;color:#F8FAFC;font-family:var(--font-mono);line-height:1.2;margin:4px 0;">--:--:--</div>
+          <div class="kpi-subtext" id="metricLastTimestampSub" style="color:#10B981;font-weight:600;">TiDB Cloud Verified</div>
         </div>
       </div>
 
@@ -1749,6 +1768,8 @@ document.addEventListener('DOMContentLoaded', () => {
     firebaseDb.ref('radiation_scans/latest').on('value', (snapshot) => {
       const val = snapshot.val();
       if (val && val.full_72_array) {
+        const ts = val.timestamp || new Date().toLocaleTimeString('id-ID');
+        updateTimestampDisplay(ts, 'LIVE FIREBASE');
         if (!APP_STATE.isScanning) {
           logTerminal(`<span class="log-badge-ok">[FIREBASE]</span> Remote Height ${val.current_height} (Peak: ${val.max_cps} CPS)`);
           APP_STATE.currentHeight = val.current_height;
@@ -1762,6 +1783,7 @@ document.addEventListener('DOMContentLoaded', () => {
     firebaseDb.ref('radiation_scans/matrix_data').on('value', (snapshot) => {
       const val = snapshot.val();
       if (val && val.matrix && !APP_STATE.isScanning) {
+        if (val.last_updated) updateTimestampDisplay(val.last_updated, 'FIREBASE RTDB');
         APP_STATE.matrixData = val.matrix;
         renderMatrixHeatmap();
         render3DSourceViewport();
@@ -1770,6 +1792,56 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Fetch latest data & exact timestamp from TiDB Cloud on page load
+  fetchInitialHistory();
 });
+
+function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
+  const elHeader = document.getElementById('headerLastSyncTime');
+  const elBadge = document.getElementById('headerDbSourceBadge');
+  const elKpi = document.getElementById('metricLastTimestamp');
+  
+  if (elHeader && timeStr) elHeader.textContent = timeStr;
+  if (elBadge && sourceLabel) elBadge.textContent = sourceLabel;
+  if (elKpi && timeStr) elKpi.textContent = timeStr;
+}
+
+function fetchInitialHistory() {
+  fetch('/api/matrix/history')
+    .then(res => res.json())
+    .then(data => {
+      if (data && data.records && data.records.length > 0) {
+        const latest = data.records[0];
+        const timeStr = latest.timestamp || latest.created_at || 'Baru Saja';
+        updateTimestampDisplay(timeStr, data.source === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
+        
+        if (APP_STATE.matrixData.length === 0) {
+          const matrixFromDb = [];
+          const sorted = [...data.records].reverse();
+          sorted.forEach(rec => {
+            if (rec.detector_data && Array.isArray(rec.detector_data)) {
+              matrixFromDb.push(rec.detector_data);
+            }
+          });
+          if (matrixFromDb.length > 0) {
+            APP_STATE.matrixData = matrixFromDb;
+            APP_STATE.currentHeight = matrixFromDb.length;
+            document.getElementById('headerHeightProgress').textContent = `${matrixFromDb.length} / ${APP_STATE.totalHeights}`;
+            renderMatrixHeatmap();
+            render3DSourceViewport();
+            renderTopViewXZ();
+            updateRawTable();
+          }
+        }
+      } else {
+        updateTimestampDisplay('Belum ada data', 'READY');
+      }
+    })
+    .catch(err => {
+      console.warn("[History Fetch Error]", err);
+      updateTimestampDisplay(new Date().toLocaleTimeString(), 'LIVE');
+    });
+}
 </script>
 @endsection
