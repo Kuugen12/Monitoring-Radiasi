@@ -223,13 +223,90 @@ body.matrix-body {
   display: flex;
   align-items: center;
   gap: 7px;
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   padding: 5px 11px;
   border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   font-size: 11.5px;
   color: var(--text-secondary);
+}
+
+.hud-chip.object-chip {
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 4px 8px 4px 10px;
+  gap: 7px;
+  transition: all var(--transition-fast);
+}
+
+.hud-chip.object-chip:hover {
+  border-color: rgba(139, 92, 246, 0.55);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+}
+
+.hud-object-select {
+  background: rgba(15, 23, 42, 0.9);
+  color: #C4B5FD;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: var(--radius-xs);
+  padding: 3px 26px 3px 9px;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--transition-fast);
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23C4B5FD' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  max-width: 220px;
+  text-overflow: ellipsis;
+}
+
+:root.light-mode .hud-object-select,
+html.light-mode .hud-object-select {
+  background-color: #ffffff;
+  color: #6D28D9;
+  border-color: rgba(109, 40, 217, 0.35);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236D28D9' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.hud-object-select:focus {
+  border-color: #8B5CF6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.4);
+}
+
+.btn-refresh-objects {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: #C4B5FD;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.btn-refresh-objects:hover {
+  background: rgba(139, 92, 246, 0.3);
+  color: #ffffff;
+  transform: rotate(180deg);
+}
+
+.btn-refresh-objects.spinning {
+  animation: spinObjectRefresh 0.8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spinObjectRefresh {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .hud-chip.live-chip {

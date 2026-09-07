@@ -18,20 +18,74 @@ class MatrixController extends Controller
 
     /**
      * API: Get scan matrix records from TiDB Cloud database (with SQLite fallback).
+     * Supports filtering by ?object_name=... and ?session_id=...
      */
-    public function getHistory()
+    public function getHistory(Request $request)
     {
+        $objectFilter = $request->query('object_name');
+        $sessionFilter = $request->query('session_id');
+        $limit = (int) $request->query('limit', 100);
+
         $rows = [];
+        $availableObjects = [];
+        $availableSessions = [];
         $source = 'tidb_cloud';
 
         // 1. Prioritas Utama: Ambil langsung dari TiDB Cloud (MySQL Connection)
         try {
-            $records = DB::table('scan_matrix')->orderBy('id', 'desc')->limit(50)->get();
+            $query = DB::table('scan_matrix');
+            if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
+                $query->where('session_id', $sessionFilter);
+            } elseif (!empty($objectFilter) && $objectFilter !== 'ALL') {
+                $query->where('object_name', $objectFilter);
+            }
+
+            $records = $query->orderBy('id', 'desc')->limit($limit)->get();
             if ($records->isNotEmpty()) {
                 $rows = $records->map(function ($item) {
                     return (array) $item;
                 })->toArray();
             }
+
+            // Ambil daftar seluruh objek yang pernah di-scan
+            $availableObjects = DB::table('scan_matrix')
+                ->select(
+                    'object_name',
+                    DB::raw('COUNT(*) as total_records'),
+                    DB::raw('MAX(timestamp) as last_ts'),
+                    DB::raw('MAX(created_at) as last_created'),
+                    DB::raw('MAX(max_cps) as peak_cps'),
+                    DB::raw('ROUND(AVG(avg_cps), 1) as mean_cps'),
+                    DB::raw('MAX(height_level) as max_height'),
+                    DB::raw('MAX(total_loops) as total_loops')
+                )
+                ->whereNotNull('object_name')
+                ->where('object_name', '<>', '')
+                ->groupBy('object_name')
+                ->orderBy('last_created', 'desc')
+                ->get()
+                ->toArray();
+
+            // Ambil daftar sesi terbaru
+            $availableSessions = DB::table('scan_matrix')
+                ->select(
+                    'session_id',
+                    'object_name',
+                    DB::raw('COUNT(*) as total_records'),
+                    DB::raw('MAX(timestamp) as last_ts'),
+                    DB::raw('MAX(created_at) as last_created'),
+                    DB::raw('MAX(max_cps) as peak_cps'),
+                    DB::raw('MAX(height_level) as max_height'),
+                    DB::raw('MAX(total_loops) as total_loops')
+                )
+                ->whereNotNull('session_id')
+                ->where('session_id', '<>', '')
+                ->groupBy('session_id', 'object_name')
+                ->orderBy('last_created', 'desc')
+                ->limit(20)
+                ->get()
+                ->toArray();
+
         } catch (\Exception $e) {
             // 2. Fallback: Baca dari SQLite lokal jika koneksi TiDB offline
             $dbPath = base_path('arraydata.db');
@@ -39,8 +93,28 @@ class MatrixController extends Controller
                 try {
                     $sqlite = new \PDO("sqlite:" . $dbPath);
                     $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-                    $stmt = $sqlite->query("SELECT * FROM scan_matrix ORDER BY id DESC LIMIT 50");
+                    
+                    if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
+                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE session_id = :sess ORDER BY id DESC LIMIT :lim");
+                        $stmt->bindValue(':sess', $sessionFilter);
+                        $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
+                        $stmt->execute();
+                    } elseif (!empty($objectFilter) && $objectFilter !== 'ALL') {
+                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj ORDER BY id DESC LIMIT :lim");
+                        $stmt->bindValue(':obj', $objectFilter);
+                        $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
+                        $stmt->execute();
+                    } else {
+                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix ORDER BY id DESC LIMIT :lim");
+                        $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
+                        $stmt->execute();
+                    }
                     $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+
+                    // Objects from SQLite
+                    $objStmt = $sqlite->query("SELECT object_name, COUNT(*) as total_records, MAX(timestamp) as last_ts, MAX(max_cps) as peak_cps, ROUND(AVG(avg_cps), 1) as mean_cps, MAX(height_level) as max_height, MAX(total_loops) as total_loops FROM scan_matrix WHERE object_name IS NOT NULL AND object_name != '' GROUP BY object_name ORDER BY MAX(id) DESC");
+                    $availableObjects = $objStmt->fetchAll(\PDO::FETCH_ASSOC);
+
                     $source = 'sqlite_local';
                 } catch (\Exception $ex) {}
             }
@@ -50,8 +124,11 @@ class MatrixController extends Controller
             return response()->json([
                 'status' => 'empty',
                 'source' => $source,
+                'current_object' => $objectFilter ?: 'ALL',
                 'records' => [],
-                'message' => 'Belum ada data scan di database.'
+                'available_objects' => $availableObjects,
+                'available_sessions' => $availableSessions,
+                'message' => 'Belum ada data scan di database untuk filter ini.'
             ]);
         }
 
@@ -77,8 +154,11 @@ class MatrixController extends Controller
         return response()->json([
             'status' => 'success',
             'source' => $source,
+            'current_object' => $objectFilter ?: 'ALL',
             'total' => count($rows),
-            'records' => $rows
+            'records' => $rows,
+            'available_objects' => $availableObjects,
+            'available_sessions' => $availableSessions
         ]);
     }
 
