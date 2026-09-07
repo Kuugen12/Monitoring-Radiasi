@@ -49,12 +49,10 @@ Route::middleware('auth')->group(function () {
 // Matrix Data Endpoints (accessible for Web Frontend & Raspberry Pi 5 / TiDB Cloud Sync)
 Route::get('/matrix-data/history', [MatrixController::class, 'getHistory'])->name('matrix.data.history');
 Route::post('/matrix-data/save-session', [MatrixController::class, 'saveSession'])->name('matrix.data.save_session');
-Route::post('/matrix-data/delete', [MatrixController::class, 'deleteData'])->name('matrix.data.delete');
 Route::get('/matrix-data/export-csv', [MatrixController::class, 'downloadCsv'])->name('matrix.data.export_csv');
 
 // API Aliases
 Route::get('/api/matrix/history', [MatrixController::class, 'getHistory'])->name('matrix.history');
 Route::post('/api/matrix/save-session', [MatrixController::class, 'saveSession'])->name('matrix.save_session');
-Route::post('/api/matrix/delete', [MatrixController::class, 'deleteData'])->name('matrix.delete');
 Route::get('/api/matrix/export-csv', [MatrixController::class, 'downloadCsv'])->name('matrix.export_csv');
 
