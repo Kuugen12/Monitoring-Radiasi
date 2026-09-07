@@ -268,6 +268,67 @@ class MatrixController extends Controller
     }
 
     /**
+     * API: Delete data records, objects, or sessions from TiDB Cloud & SQLite fallback.
+     */
+    public function deleteData(Request $request)
+    {
+        $type = $request->input('type'); // 'session' | 'object' | 'record' | 'all'
+        $id = $request->input('id');
+        $objectName = $request->input('object_name');
+        $sessionId = $request->input('session_id');
+
+        $deletedCount = 0;
+        $dbStatus = 'tidb_cloud';
+
+        try {
+            if ($type === 'session' && !empty($sessionId)) {
+                $deletedCount = DB::table('scan_matrix')->where('session_id', $sessionId)->delete();
+            } elseif ($type === 'object' && !empty($objectName) && $objectName !== 'ALL') {
+                $deletedCount = DB::table('scan_matrix')->where('object_name', $objectName)->delete();
+            } elseif ($type === 'record' && !empty($id)) {
+                $deletedCount = DB::table('scan_matrix')->where('id', $id)->delete();
+            } elseif ($type === 'all') {
+                $deletedCount = DB::table('scan_matrix')->delete();
+            } else {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Parameter penghapusan data tidak valid.'
+                ], 400);
+            }
+        } catch (\Exception $e) {
+            $dbStatus = 'error_tidb: ' . $e->getMessage();
+        }
+
+        // SQLite fallback deletion
+        $dbPath = base_path('arraydata.db');
+        if (file_exists($dbPath)) {
+            try {
+                $sqlite = new \PDO("sqlite:" . $dbPath);
+                $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                if ($type === 'session' && !empty($sessionId)) {
+                    $stmt = $sqlite->prepare("DELETE FROM scan_matrix WHERE session_id = :sess");
+                    $stmt->execute([':sess' => $sessionId]);
+                } elseif ($type === 'object' && !empty($objectName) && $objectName !== 'ALL') {
+                    $stmt = $sqlite->prepare("DELETE FROM scan_matrix WHERE object_name = :obj");
+                    $stmt->execute([':obj' => $objectName]);
+                } elseif ($type === 'record' && !empty($id)) {
+                    $stmt = $sqlite->prepare("DELETE FROM scan_matrix WHERE id = :id");
+                    $stmt->execute([':id' => $id]);
+                } elseif ($type === 'all') {
+                    $sqlite->exec("DELETE FROM scan_matrix");
+                }
+            } catch (\Exception $ex) {}
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => "Berhasil menghapus {$deletedCount} data dari database.",
+            'deleted_count' => $deletedCount,
+            'db_target' => $dbStatus
+        ]);
+    }
+
+    /**
      * API: Download or preview current heatmap_radiation_matrix.csv.
      */
     public function downloadCsv()
