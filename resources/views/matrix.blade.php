@@ -604,6 +604,7 @@ const APP_STATE = {
   totalHeights: 24,
   currentHeight: 0,
   objectName: 'Gentong',
+  objectMaxCps: 44,
   totalLoops: 1,
   currentLoop: 1,
   transitionDelay: 0.3,
@@ -1328,32 +1329,51 @@ function updateIndividualChannelsVisual(full72) {
     else xs3Sum += cps;
   }
 
-  document.getElementById('modAvgXS1').textContent = `${Math.round(xs1Sum / 24)} CPS`;
-  document.getElementById('modAvgXS2').textContent = `${Math.round(xs2Sum / 24)} CPS`;
-  document.getElementById('modAvgXS3').textContent = `${Math.round(xs3Sum / 24)} CPS`;
+  const elXs1 = document.getElementById('modAvgXS1');
+  if (elXs1) elXs1.textContent = `${Math.round(xs1Sum / 24)} CPS`;
+  const elXs2 = document.getElementById('modAvgXS2');
+  if (elXs2) elXs2.textContent = `${Math.round(xs2Sum / 24)} CPS`;
+  const elXs3 = document.getElementById('modAvgXS3');
+  if (elXs3) elXs3.textContent = `${Math.round(xs3Sum / 24)} CPS`;
 }
 
 // 12. SCANNING ENGINE & LIVE DATA GENERATION
 function generateDummyModuleData(moduleId, isHotspot) {
   const data = [];
+  const targetPeak = (APP_STATE.objectMaxCps && APP_STATE.objectMaxCps > 0) ? APP_STATE.objectMaxCps : 44;
   const nameLower = (APP_STATE.objectName || '').toLowerCase();
-  const isGentongLimbah = nameLower.includes('limbah') || nameLower.includes('demo');
-  const maxCap = isGentongLimbah ? 35 : 750;
+  const isLowRadiationObj = targetPeak <= 100 || nameLower.includes('demo') || nameLower.includes('limbah');
 
-  for (let ch = 0; ch < 24; ch++) {
-    let base = isGentongLimbah ? (Math.floor(Math.random() * 15) + 15) : (Math.floor(Math.random() * 25) + 18);
-    if (isHotspot && moduleId === 2 && !isGentongLimbah) {
-      const dist = Math.abs(ch - 14); // peak at XS2 ch 14 (D38)
-      if (dist <= 5) {
-        const boost = Math.floor((Math.random() * 140 + 160) * Math.max(0.2, (1 - dist / 6)));
-        base += boost;
-      } else {
-        base += Math.floor(Math.random() * 35) + 20;
+  if (isLowRadiationObj) {
+    const maxVal = targetPeak;
+    const minVal = Math.max(12, Math.floor(maxVal * 0.45));
+    for (let ch = 0; ch < 24; ch++) {
+      let val = Math.floor(Math.random() * (Math.max(minVal + 2, Math.floor(maxVal * 0.75)) - minVal + 1)) + minVal;
+      if (isHotspot && moduleId === 2) {
+        const dist = Math.abs(ch - 14); // peak at XS2 ch 14
+        if (dist <= 4) {
+          const boost = Math.floor((maxVal - val) * Math.max(0.3, (1 - dist / 5)));
+          val = Math.min(maxVal, val + boost);
+        }
       }
-    } else if (isHotspot && !isGentongLimbah && (moduleId === 1 && ch > 18 || moduleId === 3 && ch < 6)) {
-      base += Math.floor(Math.random() * 30) + 10;
+      data.push(Math.min(maxVal, Math.max(8, val)));
     }
-    data.push(Math.min(maxCap, base));
+  } else {
+    for (let ch = 0; ch < 24; ch++) {
+      let base = Math.floor(Math.random() * 25) + 18;
+      if (isHotspot && moduleId === 2) {
+        const dist = Math.abs(ch - 14); // peak at XS2 ch 14 (D38)
+        if (dist <= 5) {
+          const boost = Math.floor((Math.random() * 140 + 160) * Math.max(0.2, (1 - dist / 6)));
+          base += boost;
+        } else {
+          base += Math.floor(Math.random() * 35) + 20;
+        }
+      } else if (isHotspot && (moduleId === 1 && ch > 18 || moduleId === 3 && ch < 6)) {
+        base += Math.floor(Math.random() * 30) + 10;
+      }
+      data.push(Math.min(targetPeak, base));
+    }
   }
   return data;
 }
@@ -1688,150 +1708,170 @@ function startScanning(fromModal = false) {
 function executeScanCycle() {
   if (!APP_STATE.isScanning || APP_STATE.isPaused || APP_STATE.isTransitioning) return;
 
-  const h = APP_STATE.currentHeight;
-  const l = APP_STATE.currentLoop;
+  try {
+    const h = APP_STATE.currentHeight;
+    const l = APP_STATE.currentLoop;
 
-  if (h > APP_STATE.totalHeights) {
-    stopScanning(true);
-    return;
-  }
+    if (h > APP_STATE.totalHeights) {
+      stopScanning(true);
+      return;
+    }
 
-  const hasAnomaly = (h === 4 || h === 5 || h === 6);
-  const d1 = generateDummyModuleData(1, hasAnomaly);
-  const d2 = generateDummyModuleData(2, hasAnomaly);
-  const d3 = generateDummyModuleData(3, hasAnomaly);
-  const full72 = [...d1, ...d2, ...d3];
+    const hasAnomaly = (h === 4 || h === 5 || h === 6);
+    const d1 = generateDummyModuleData(1, hasAnomaly);
+    const d2 = generateDummyModuleData(2, hasAnomaly);
+    const d3 = generateDummyModuleData(3, hasAnomaly);
+    const full72 = [...d1, ...d2, ...d3];
 
-  // Update heatmap matrix representation
-  if (APP_STATE.matrixData.length < h) {
-    APP_STATE.matrixData.push(full72);
-  } else {
-    APP_STATE.matrixData[h - 1] = full72;
-  }
+    // Update heatmap matrix representation
+    if (APP_STATE.matrixData.length < h) {
+      APP_STATE.matrixData.push(full72);
+    } else {
+      APP_STATE.matrixData[h - 1] = full72;
+    }
 
-  // Compute Averages
-  const avg1 = d1.reduce((a, b) => a + b, 0) / 24;
-  const avg2 = d2.reduce((a, b) => a + b, 0) / 24;
-  const avg3 = d3.reduce((a, b) => a + b, 0) / 24;
-  const maxCps = Math.max(...full72);
-  const maxChannelIndex = full72.indexOf(maxCps) + 1;
-  const totalCps = full72.reduce((a, b) => a + b, 0);
-  const globalAvg = (totalCps / 72).toFixed(1);
-  const nowTs = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    // Compute Averages
+    const avg1 = d1.reduce((a, b) => a + b, 0) / 24;
+    const avg2 = d2.reduce((a, b) => a + b, 0) / 24;
+    const avg3 = d3.reduce((a, b) => a + b, 0) / 24;
+    const maxCps = Math.max(...full72);
+    const maxChannelIndex = full72.indexOf(maxCps) + 1;
+    const totalCps = full72.reduce((a, b) => a + b, 0);
+    const globalAvg = (totalCps / 72).toFixed(1);
+    const nowTs = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
-  // Store in sessionRecords for batch/single save
-  APP_STATE.sessionRecords.push({
-    timestamp: nowTs,
-    height: h,
-    loop_index: l,
-    detector_data: full72,
-    xs1_data: d1,
-    xs2_data: d2,
-    xs3_data: d3,
-    max_cps: maxCps,
-    avg_cps: parseFloat(globalAvg)
-  });
+    // Store in sessionRecords for batch/single save
+    APP_STATE.sessionRecords.push({
+      timestamp: nowTs,
+      height: h,
+      loop_index: l,
+      detector_data: full72,
+      xs1_data: d1,
+      xs2_data: d2,
+      xs3_data: d3,
+      max_cps: maxCps,
+      avg_cps: parseFloat(globalAvg)
+    });
 
-  // Update UI Stats & HUD
-  document.getElementById('headerHeightProgress').textContent = `${h} / ${APP_STATE.totalHeights}`;
-  document.getElementById('headerLoopProgress').textContent = `${l} / ${APP_STATE.totalLoops}`;
-  document.getElementById('metricActiveLoop').innerHTML = `${h} <span class="kpi-unit">/ ${APP_STATE.totalHeights}</span>`;
-  document.getElementById('metricMaxCps').innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
-  document.getElementById('metricMaxChannel').textContent = `Detector D${maxChannelIndex} (XS${maxChannelIndex <= 24 ? 1 : (maxChannelIndex <= 48 ? 2 : 3)})`;
-  document.getElementById('metricAvgCps').innerHTML = `${globalAvg} <span class="kpi-unit">cps</span>`;
-  document.getElementById('metricTotalCounts').innerHTML = `${totalCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
+    // Update UI Stats & HUD
+    const elHp = document.getElementById('headerHeightProgress');
+    if (elHp) elHp.textContent = `${h} / ${APP_STATE.totalHeights}`;
+    const elLp = document.getElementById('headerLoopProgress');
+    if (elLp) elLp.textContent = `${l} / ${APP_STATE.totalLoops}`;
+    const elAct = document.getElementById('metricActiveLoop');
+    if (elAct) elAct.innerHTML = `${h} <span class="kpi-unit">/ ${APP_STATE.totalHeights}</span>`;
+    const elMax = document.getElementById('metricMaxCps');
+    if (elMax) elMax.innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
+    const elMaxCh = document.getElementById('metricMaxChannel');
+    if (elMaxCh) elMaxCh.textContent = `Detector D${maxChannelIndex} (XS${maxChannelIndex <= 24 ? 1 : (maxChannelIndex <= 48 ? 2 : 3)})`;
+    const elAvg = document.getElementById('metricAvgCps');
+    if (elAvg) elAvg.innerHTML = `${globalAvg} <span class="kpi-unit">cps</span>`;
+    const elTot = document.getElementById('metricTotalCounts');
+    if (elTot) elTot.innerHTML = `${totalCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
 
-  // Update Estimated Source Coordinates
-  if (hasAnomaly || maxCps > 100) {
-    APP_STATE.estimatedSource = {
-      x: 416.4 + (Math.random() * 4 - 2),
-      y: -32.4 + (Math.random() * 2 - 1),
-      z: (h * 35) + (Math.random() * 4 - 2),
-      confidence: Math.min(98.8, 85.0 + (maxCps / 350) * 13).toFixed(1)
-    };
-    document.getElementById('statPosX').textContent = `${APP_STATE.estimatedSource.x.toFixed(1)} cm`;
-    document.getElementById('statPosY').textContent = `${APP_STATE.estimatedSource.y.toFixed(1)} cm`;
-    document.getElementById('statPosZ').textContent = `${APP_STATE.estimatedSource.z.toFixed(1)} cm`;
-    document.getElementById('statConfidence').textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
-    document.getElementById('statConfidenceVal').textContent = `${APP_STATE.estimatedSource.confidence}%`;
-    document.getElementById('statHotspotCount').textContent = `XS2 (D${maxChannelIndex})`;
-  }
+    // Update Estimated Source Coordinates
+    if (hasAnomaly || maxCps > 100) {
+      APP_STATE.estimatedSource = {
+        x: 416.4 + (Math.random() * 4 - 2),
+        y: -32.4 + (Math.random() * 2 - 1),
+        z: (h * 35) + (Math.random() * 4 - 2),
+        confidence: Math.min(98.8, 85.0 + (maxCps / 350) * 13).toFixed(1)
+      };
+      const spX = document.getElementById('statPosX');
+      if (spX) spX.textContent = `${APP_STATE.estimatedSource.x.toFixed(1)} cm`;
+      const spY = document.getElementById('statPosY');
+      if (spY) spY.textContent = `${APP_STATE.estimatedSource.y.toFixed(1)} cm`;
+      const spZ = document.getElementById('statPosZ');
+      if (spZ) spZ.textContent = `${APP_STATE.estimatedSource.z.toFixed(1)} cm`;
+      const sConf = document.getElementById('statConfidence');
+      if (sConf) sConf.textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
+      const sConfV = document.getElementById('statConfidenceVal');
+      if (sConfV) sConfV.textContent = `${APP_STATE.estimatedSource.confidence}%`;
+      const sHs = document.getElementById('statHotspotCount');
+      if (sHs) sHs.textContent = `XS2 (D${maxChannelIndex})`;
+    }
 
-  // Update Real-time Chart
-  const timeLabel = new Date().toLocaleTimeString();
-  telemetryChart.data.labels.push(timeLabel);
-  telemetryChart.data.datasets[0].data.push(avg1);
-  telemetryChart.data.datasets[1].data.push(avg2);
-  telemetryChart.data.datasets[2].data.push(avg3);
+    // Update Real-time Chart
+    if (typeof telemetryChart !== 'undefined' && telemetryChart && telemetryChart.data) {
+      const timeLabel = new Date().toLocaleTimeString();
+      telemetryChart.data.labels.push(timeLabel);
+      telemetryChart.data.datasets[0].data.push(avg1);
+      telemetryChart.data.datasets[1].data.push(avg2);
+      telemetryChart.data.datasets[2].data.push(avg3);
 
-  if (telemetryChart.data.labels.length > 20) {
-    telemetryChart.data.labels.shift();
-    telemetryChart.data.datasets.forEach(ds => ds.data.shift());
-  }
-  telemetryChart.update();
+      if (telemetryChart.data.labels.length > 20) {
+        telemetryChart.data.labels.shift();
+        telemetryChart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      telemetryChart.update();
+    }
 
-  // Update individual 72 channels & micro strip
-  updateIndividualChannelsVisual(full72);
+    // Update individual 72 channels & micro strip
+    updateIndividualChannelsVisual(full72);
 
-  // Log to Terminal Screen
-  const statusTag = maxCps >= APP_STATE.hotspotThreshold ? '<span class="log-badge-alert">[HOTSPOT]</span>' : '<span class="log-badge-ok">[NORMAL]</span>';
-  logTerminal(`[Tinggi:${h}/${APP_STATE.totalHeights} | Loop:${l}/${APP_STATE.totalLoops}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
+    // Log to Terminal Screen
+    const statusTag = maxCps >= APP_STATE.hotspotThreshold ? '<span class="log-badge-alert">[HOTSPOT]</span>' : '<span class="log-badge-ok">[NORMAL]</span>';
+    logTerminal(`[Tinggi:${h}/${APP_STATE.totalHeights} | Loop:${l}/${APP_STATE.totalLoops}] ${statusTag} Peak ${maxCps} CPS (D${maxChannelIndex})`);
 
-  // Push to Firebase RTDB if active
-  if (APP_STATE.useFirebase && firebaseDb) {
-    pushToFirebase(h, l, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
-  }
+    // Push to Firebase RTDB if active
+    if (APP_STATE.useFirebase && typeof firebaseDb !== 'undefined' && firebaseDb) {
+      pushToFirebase(h, l, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
+    }
 
-  // Highlight Sidebar Loop item
-  const loopItem = document.getElementById(`loopItem-${h}`);
-  if (loopItem) {
-    loopItem.classList.add('active');
-    if (hasAnomaly) loopItem.classList.add('has-hotspot');
-  }
+    // Highlight Sidebar Loop item
+    const loopItem = document.getElementById(`loopItem-${h}`);
+    if (loopItem) {
+      loopItem.classList.add('active');
+      if (hasAnomaly) loopItem.classList.add('has-hotspot');
+    }
 
-  // Re-render Views
-  renderMatrixHeatmap();
-  render3DSourceViewport();
-  renderTopViewXZ();
-  updateRawTable();
+    // Re-render Views
+    renderMatrixHeatmap();
+    render3DSourceViewport();
+    renderTopViewXZ();
+    updateRawTable();
 
-  // Schedule Next Step (Multi-loop or Transition Delay)
-  if (l < APP_STATE.totalLoops) {
-    // Next loop on the same height
-    APP_STATE.currentLoop++;
-    clearTimeout(APP_STATE.scanIntervalId);
-    APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
-  } else {
-    // Current height finished all loops
-    if (h < APP_STATE.totalHeights) {
-      // Transition to next height step
-      if (APP_STATE.transitionDelay > 0) {
-        APP_STATE.isTransitioning = true;
-        const transChip = document.getElementById('hudTransitionChip');
-        const transText = document.getElementById('headerTransitionText');
-        if (transChip) transChip.style.display = 'inline-flex';
-        if (transText) transText.textContent = `Transisi Lift Baris ${h} ➔ ${h+1} (${APP_STATE.transitionDelay}s)...`;
+    // Schedule Next Step (Multi-loop or Transition Delay)
+    if (l < APP_STATE.totalLoops) {
+      // Next loop on the same height
+      APP_STATE.currentLoop++;
+      clearTimeout(APP_STATE.scanIntervalId);
+      APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
+    } else {
+      // Current height finished all loops
+      if (h < APP_STATE.totalHeights) {
+        // Transition to next height step
+        if (APP_STATE.transitionDelay > 0) {
+          APP_STATE.isTransitioning = true;
+          const transChip = document.getElementById('hudTransitionChip');
+          const transText = document.getElementById('headerTransitionText');
+          if (transChip) transChip.style.display = 'inline-flex';
+          if (transText) transText.textContent = `Transisi Lift Baris ${h} ➔ ${h+1} (${APP_STATE.transitionDelay}s)...`;
 
-        logTerminal(`<span class="log-badge-warn">[TRANSISI LIFT]</span> Selesai baris ${h} (${APP_STATE.totalLoops} loop). Menunggu jeda transisi lift ${APP_STATE.transitionDelay}s sebelum baris ${h+1}...`);
+          logTerminal(`<span class="log-badge-warn">[TRANSISI LIFT]</span> Selesai baris ${h} (${APP_STATE.totalLoops} loop). Menunggu jeda transisi lift ${APP_STATE.transitionDelay}s sebelum baris ${h+1}...`);
 
-        clearTimeout(APP_STATE.scanIntervalId);
-        APP_STATE.scanIntervalId = setTimeout(() => {
-          APP_STATE.isTransitioning = false;
-          if (transChip) transChip.style.display = 'none';
+          clearTimeout(APP_STATE.scanIntervalId);
+          APP_STATE.scanIntervalId = setTimeout(() => {
+            APP_STATE.isTransitioning = false;
+            if (transChip) transChip.style.display = 'none';
+            APP_STATE.currentHeight = h + 1;
+            APP_STATE.currentLoop = 1;
+            executeScanCycle();
+          }, APP_STATE.transitionDelay * 1000);
+        } else {
           APP_STATE.currentHeight = h + 1;
           APP_STATE.currentLoop = 1;
-          executeScanCycle();
-        }, APP_STATE.transitionDelay * 1000);
+          clearTimeout(APP_STATE.scanIntervalId);
+          APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
+        }
       } else {
-        APP_STATE.currentHeight = h + 1;
-        APP_STATE.currentLoop = 1;
-        clearTimeout(APP_STATE.scanIntervalId);
-        APP_STATE.scanIntervalId = setTimeout(executeScanCycle, APP_STATE.samplingIntervalMs);
+        // All heights and all loops completed!
+        stopScanning(true);
       }
-    } else {
-      // All heights and all loops completed!
-      stopScanning(true);
     }
+  } catch (cycleErr) {
+    console.error('[Scan Cycle Execution Error]', cycleErr);
+    stopScanning(true);
   }
 }
 
@@ -2506,6 +2546,7 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
           APP_STATE.totalHeights = matrixFromDb.length;
           APP_STATE.currentHeight = matrixFromDb.length;
           APP_STATE.totalLoops = latest.total_loops || 1;
+          APP_STATE.objectMaxCps = globalPeakCps || 44;
 
           if (objectName !== 'ALL') {
             APP_STATE.objectName = objectName;
