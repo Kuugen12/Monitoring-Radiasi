@@ -39,7 +39,7 @@ class MatrixController extends Controller
                 Cache::forget('tidb_available_objects');
             }
 
-            // Ambil daftar seluruh objek yang pernah di-scan (Query Tunggal & Cache 15s untuk respon instan)
+            // Ambil daftar seluruh objek yang pernah di-scan (Query Tunggal & Cache 15s)
             $availableObjects = Cache::remember('tidb_available_objects', 15, function () {
                 $rawObjects = DB::table('scan_matrix')
                     ->select(
@@ -71,25 +71,11 @@ class MatrixController extends Controller
                 }
             }
 
-            // Ambil data matriks record untuk objectFilter
-            $query = DB::table('scan_matrix');
+            // Ambil data matriks record untuk objectFilter (Single fast query)
+            $query = DB::table('scan_matrix')->where('object_name', $objectFilter);
             if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
                 $query->where('session_id', $sessionFilter);
-            } else {
-                $latestSession = DB::table('scan_matrix')
-                    ->where('object_name', $objectFilter)
-                    ->whereNotNull('session_id')
-                    ->where('session_id', '<>', '')
-                    ->orderBy('id', 'desc')
-                    ->value('session_id');
-
-                if ($latestSession) {
-                    $query->where('object_name', $objectFilter)->where('session_id', $latestSession);
-                } else {
-                    $query->where('object_name', $objectFilter);
-                }
             }
-
             $records = $query->orderBy('id', 'desc')->limit($limit)->get();
             if ($records->isNotEmpty()) {
                 $rows = $records->map(function ($item) {
@@ -106,7 +92,7 @@ class MatrixController extends Controller
                     $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                     
                     // Objects from SQLite
-                    $objStmt = $sqlite->query("SELECT object_name, COUNT(*) as total_records, MAX(timestamp) as last_ts, MAX(max_cps) as peak_cps, ROUND(AVG(avg_cps), 1) as mean_cps, MAX(height_level) as max_height, MAX(total_loops) as total_loops FROM scan_matrix WHERE object_name IS NOT NULL AND object_name != '' GROUP BY object_name ORDER BY MAX(id) DESC");
+                    $objStmt = $sqlite->query("SELECT object_name, COUNT(*) as total_records, MAX(timestamp) as last_ts, MAX(max_cps) as peak_cps, ROUND(AVG(avg_cps), 1) as mean_cps, MAX(height_level) as max_height, COALESCE(MAX(total_loops), 1) as loops FROM scan_matrix WHERE object_name IS NOT NULL AND object_name != '' GROUP BY object_name ORDER BY MAX(id) DESC");
                     $availableObjects = $objStmt->fetchAll(\PDO::FETCH_ASSOC);
 
                     if (empty($objectFilter) || $objectFilter === 'ALL') {
@@ -121,25 +107,12 @@ class MatrixController extends Controller
                         $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE session_id = :sess ORDER BY id DESC LIMIT :lim");
                         $stmt->bindValue(':sess', $sessionFilter);
                         $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
-                        $stmt->execute();
                     } else {
-                        $latestSessStmt = $sqlite->prepare("SELECT session_id FROM scan_matrix WHERE object_name = :obj AND session_id IS NOT NULL AND session_id != '' ORDER BY id DESC LIMIT 1");
-                        $latestSessStmt->bindValue(':obj', $objectFilter);
-                        $latestSessStmt->execute();
-                        $latestSess = $latestSessStmt->fetchColumn();
-
-                        if ($latestSess) {
-                            $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj AND session_id = :sess ORDER BY id DESC LIMIT :lim");
-                            $stmt->bindValue(':obj', $objectFilter);
-                            $stmt->bindValue(':sess', $latestSess);
-                            $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
-                        } else {
-                            $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj ORDER BY id DESC LIMIT :lim");
-                            $stmt->bindValue(':obj', $objectFilter);
-                            $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
-                        }
-                        $stmt->execute();
+                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj ORDER BY id DESC LIMIT :lim");
+                        $stmt->bindValue(':obj', $objectFilter);
+                        $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
                     }
+                    $stmt->execute();
                     $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
 
                     $source = 'sqlite_local';
@@ -154,7 +127,6 @@ class MatrixController extends Controller
                 'current_object' => $objectFilter ?: 'ALL',
                 'records' => [],
                 'available_objects' => $availableObjects,
-                'available_sessions' => $availableSessions,
                 'message' => 'Belum ada data scan di database untuk filter ini.'
             ]);
         }
@@ -180,7 +152,7 @@ class MatrixController extends Controller
                 $row['detector_data'] = array_merge($d1, $d2, $d3);
             }
             if (!isset($row['object_name']) || empty($row['object_name'])) {
-                $row['object_name'] = 'Gentong';
+                $row['object_name'] = $objectFilter ?: 'Gentong';
             }
         }
 
@@ -190,8 +162,7 @@ class MatrixController extends Controller
             'current_object' => $objectFilter ?: 'ALL',
             'total' => count($rows),
             'records' => $rows,
-            'available_objects' => $availableObjects,
-            'available_sessions' => $availableSessions
+            'available_objects' => $availableObjects
         ]);
     }
 

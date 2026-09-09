@@ -608,8 +608,7 @@ const APP_STATE = {
   timestamps: [],
   selectedLoops: new Set(),
   userModifiedLoops: false,
-  estimatedSource: { x: 412.5, y: -32.7, z: 186.4, confidence: 96.2 },
-  objectCache: {}
+  estimatedSource: { x: 412.5, y: -32.7, z: 186.4, confidence: 96.2 }
 };
 
 // 2. FIREBASE REALTIME DB INITIALIZATION
@@ -3412,147 +3411,59 @@ function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
 }
 
 let activeTiDBFetchId = 0;
-let activeAbortController = null;
 
-function applyObjectScanData(data, resolvedObject, showNotification = false) {
-  if (!data) return;
+function populateObjectDropdown(availableObjects, currentSelected) {
+  const selectEl = document.getElementById('selectActiveObject');
+  const presetContainer = document.getElementById('modalPresetTagList');
+  const datalist = document.getElementById('tidbObjectDatalist');
+  if (!selectEl) return;
 
-  // Cache in memory for instant switching without latency
-  if (!APP_STATE.objectCache) APP_STATE.objectCache = {};
-  APP_STATE.objectCache[resolvedObject] = data;
+  const activeTarget = currentSelected || APP_STATE.objectName || selectEl.value;
 
-  if (data.records && data.records.length > 0) {
-    const latest = data.records[0];
-    const timeStr = latest.timestamp || latest.created_at || 'Baru Saja';
-    updateTimestampDisplay(timeStr, data.source === 'tidb_cloud' ? 'TiDB CLOUD' : (data.source || 'TiDB CLOUD'));
+  if (Array.isArray(availableObjects) && availableObjects.length > 0) {
+    const currentOptions = Array.from(selectEl.options).map(o => o.value);
+    const newOptions = availableObjects.map(o => o.object_name);
+    const isSameList = currentOptions.length === newOptions.length && currentOptions.every((val, idx) => val === newOptions[idx]);
 
-    // Sort ascending by height_level or ID so earlier scans are Blok 1 and latest is Blok N
-    const sorted = [...data.records].sort((a, b) => {
-      const hA = parseInt(a.height_level) || 0;
-      const hB = parseInt(b.height_level) || 0;
-      if (hA !== hB) return hA - hB;
-      const idA = parseInt(a.id) || 0;
-      const idB = parseInt(b.id) || 0;
-      return idA - idB;
-    });
+    if (!isSameList) {
+      selectEl.innerHTML = '';
+      if (datalist) datalist.innerHTML = '';
+      if (presetContainer) presetContainer.innerHTML = '';
 
-    const matrixFromDb = [];
-    let globalPeakCps = 0;
-    let peakChannelIdx = 1;
-    let totalSumCps = 0;
-    let totalCellCount = 0;
+      availableObjects.forEach((obj) => {
+        const opt = document.createElement('option');
+        opt.value = obj.object_name;
+        const count = obj.total_records || 0;
+        const loops = obj.loops || (obj.total_loops || 1);
+        opt.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
+        
+        if (activeTarget && (activeTarget === obj.object_name || activeTarget === obj.object_name.trim())) {
+          opt.selected = true;
+        }
+        selectEl.appendChild(opt);
 
-    sorted.forEach(rec => {
-      let detData = rec.detector_data;
-      if (typeof detData === 'string') {
-        try { detData = JSON.parse(detData); } catch(e) {}
-      }
-      if (detData && Array.isArray(detData) && detData.length > 0) {
-        matrixFromDb.push(detData);
-        detData.forEach((cps, idx) => {
-          const numVal = Number(cps) || 0;
-          totalSumCps += numVal;
-          totalCellCount++;
-          if (numVal > globalPeakCps) {
-            globalPeakCps = numVal;
-            peakChannelIdx = idx + 1;
-          }
-        });
-      }
-    });
+        // Add to Datalist for Modal Auto-complete
+        if (datalist) {
+          const dlOpt = document.createElement('option');
+          dlOpt.value = obj.object_name;
+          datalist.appendChild(dlOpt);
+        }
 
-    if (matrixFromDb.length > 0) {
-      const detectedRows = matrixFromDb.length;
-      const detectedCols = matrixFromDb[0].length;
-
-      APP_STATE.matrixData = matrixFromDb;
-      APP_STATE.totalHeights = detectedRows;
-      APP_STATE.currentHeight = detectedRows;
-      APP_STATE.totalLoops = latest.total_loops || Math.max(1, Math.ceil(detectedCols / 3));
-      APP_STATE.objectMaxCps = globalPeakCps || 17;
-      APP_STATE.totalChannels = detectedCols;
-      APP_STATE.objectName = resolvedObject;
-
-      // Select all loops for the newly loaded object
-      APP_STATE.selectedLoops.clear();
-      for (let i = 1; i <= detectedRows; i++) {
-        APP_STATE.selectedLoops.add(i);
-      }
-      APP_STATE.userModifiedLoops = false;
-
-      // Update HUD indicators
-      const elHp = document.getElementById('headerHeightProgress');
-      if (elHp) elHp.textContent = `${detectedRows} / ${detectedRows}`;
-      const elLp = document.getElementById('headerLoopProgress');
-      if (elLp) elLp.textContent = `1 / ${APP_STATE.totalLoops}`;
-
-      // Update Quick Inputs
-      const qSteps = document.getElementById('inputTotalHeight');
-      if (qSteps) qSteps.value = detectedRows;
-      const qLoops = document.getElementById('inputTotalLoops');
-      if (qLoops) qLoops.value = APP_STATE.totalLoops;
-
-      // Update Total Channels KPI
-      const chEl = document.getElementById('metricTotalChannels');
-      if (chEl) chEl.innerHTML = `${detectedCols} <span class="kpi-unit">Ch</span>`;
-
-      // Update Module Zone markers strip
-      updateModuleMarkers(detectedCols);
-
-      // Update KPI telemetry
-      const avgCpsVal = totalCellCount > 0 ? (totalSumCps / totalCellCount).toFixed(1) : '0.0';
-      const elAct = document.getElementById('metricActiveLoop');
-      if (elAct) elAct.innerHTML = `${detectedRows} <span class="kpi-unit">/ ${detectedRows}</span>`;
-      const elMax = document.getElementById('metricMaxCps');
-      if (elMax) elMax.innerHTML = `${globalPeakCps} <span class="kpi-unit">cps</span>`;
-      
-      const chPerMod = Math.max(1, Math.ceil(detectedCols / 3));
-      let modLabel = 'XS1';
-      if (peakChannelIdx > chPerMod && peakChannelIdx <= chPerMod * 2) modLabel = 'XS2';
-      else if (peakChannelIdx > chPerMod * 2) modLabel = 'XS3';
-      const elMaxCh = document.getElementById('metricMaxChannel');
-      if (elMaxCh) elMaxCh.textContent = `Detector D${peakChannelIdx < 10 ? '0' + peakChannelIdx : peakChannelIdx} (${modLabel})`;
-      const elAvg = document.getElementById('metricAvgCps');
-      if (elAvg) elAvg.innerHTML = `${avgCpsVal} <span class="kpi-unit">cps</span>`;
-      const elTot = document.getElementById('metricTotalCounts');
-      if (elTot) elTot.innerHTML = `${totalSumCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
-
-      // Update 3D Estimated Localization & Hotspot Position
-      recompute3DSourceLocalization();
-
-      // Update individual detector readouts
-      updateIndividualChannelsVisual(matrixFromDb[matrixFromDb.length - 1]);
-
-      // Rebuild sidebar loops and render heatmap immediately
-      buildSidebarLoopList(true);
-      updateColorbarGradient();
-      renderMatrixHeatmap();
-      render3DSourceViewport();
-      renderTopViewXZ();
-      updateRawTable();
-      setSaveButtonState('ready');
-
-      if (showNotification) {
-        showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${resolvedObject}</b> (${matrixFromDb.length} baris blok | ${detectedCols} Detektor) dari <b>TiDB Cloud</b>.`);
-        logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${resolvedObject}</strong> (${matrixFromDb.length} baris level | ${detectedCols} Detektor | Peak: ${globalPeakCps} CPS)`);
-      }
+        // Add to Modal Preset Tags
+        if (presetContainer) {
+          const tag = document.createElement('span');
+          tag.className = `preset-tag ${activeTarget === obj.object_name ? 'active' : ''}`;
+          tag.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
+          tag.title = `Loop: ${loops} | Terakhir: ${obj.last_ts || '-'}`;
+          tag.onclick = () => selectObjectPreset(obj.object_name);
+          presetContainer.appendChild(tag);
+        }
+      });
     }
-  } else {
-    updateTimestampDisplay('Belum ada data', 'READY');
-    APP_STATE.matrixData = [];
-    APP_STATE.totalHeights = 10;
-    APP_STATE.currentHeight = 0;
-    APP_STATE.objectMaxCps = 17;
-    APP_STATE.objectName = resolvedObject;
-    buildSidebarLoopList(true);
-    updateColorbarGradient();
-    renderMatrixHeatmap();
-    render3DSourceViewport();
-    renderTopViewXZ();
-    updateRawTable();
-    if (showNotification) {
-      showToast('info', 'Data Kosong', `Belum ada data rekaman pemindaian untuk objek <b>${resolvedObject}</b> di database.`);
-    }
+  }
+
+  if (activeTarget) {
+    selectEl.value = activeTarget;
   }
 }
 
@@ -3572,19 +3483,7 @@ function onObjectSelectChange(selectedName) {
   const selectEl = document.getElementById('selectActiveObject');
   if (selectEl) selectEl.value = selectedName;
 
-  // Instant SWR Render from in-memory cache if previously loaded
-  if (APP_STATE.objectCache && APP_STATE.objectCache[selectedName]) {
-    applyObjectScanData(APP_STATE.objectCache[selectedName], selectedName, false);
-    // Silent background revalidation
-    loadObjectDataFromTiDB(selectedName, false, false);
-  } else {
-    // Show responsive loading status
-    const elHeader = document.getElementById('headerLastSyncTime');
-    if (elHeader) elHeader.textContent = `Memuat ${selectedName}...`;
-    const btn = document.getElementById('btnRefreshObjects');
-    if (btn) btn.classList.add('spinning');
-    loadObjectDataFromTiDB(selectedName, true, false);
-  }
+  loadObjectDataFromTiDB(selectedName, true);
 }
 
 function refreshAvailableObjects(isManual = false) {
@@ -3592,10 +3491,10 @@ function refreshAvailableObjects(isManual = false) {
   if (btn) btn.classList.add('spinning');
   
   const targetObj = APP_STATE.objectName || (document.getElementById('selectActiveObject') ? document.getElementById('selectActiveObject').value : '');
-  loadObjectDataFromTiDB(targetObj, isManual, isManual);
+  loadObjectDataFromTiDB(targetObj, isManual);
 }
 
-function loadObjectDataFromTiDB(objectName = '', showNotification = false, isManualRefresh = false) {
+function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
   const fetchId = ++activeTiDBFetchId;
   const btn = document.getElementById('btnRefreshObjects');
   if (btn) btn.classList.add('spinning');
@@ -3605,44 +3504,160 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false, isMan
     APP_STATE.objectName = queryTarget;
   }
 
-  // Cancel any prior pending network fetch to prevent queue delays
-  if (activeAbortController) {
-    try { activeAbortController.abort(); } catch(e) {}
-  }
-  activeAbortController = new AbortController();
-
   let url = '/matrix-data/history';
-  const params = new URLSearchParams();
   if (queryTarget && queryTarget !== 'ALL') {
-    params.append('object_name', queryTarget);
-  }
-  if (isManualRefresh) {
-    params.append('refresh', '1');
-  }
-  const queryString = params.toString();
-  if (queryString) {
-    url += '?' + queryString;
+    url += '?object_name=' + encodeURIComponent(queryTarget);
   }
 
-  fetch(url, { signal: activeAbortController.signal })
+  fetch(url)
     .then(res => {
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       return res.json();
     })
     .then(data => {
-      if (fetchId !== activeTiDBFetchId) return;
+      // Discard stale background responses if user switched objects
+      if (fetchId !== activeTiDBFetchId) {
+        return;
+      }
+
       if (btn) btn.classList.remove('spinning');
 
       const resolvedObject = queryTarget || data.current_object || (data.available_objects && data.available_objects[0] ? data.available_objects[0].object_name : 'Sample_new');
 
+      // 1. Update dropdown and modal inputs from TiDB Cloud
       if (data.available_objects) {
         populateObjectDropdown(data.available_objects, resolvedObject);
       }
 
-      applyObjectScanData(data, resolvedObject, showNotification);
+      // 2. Process records
+      if (data && data.records && data.records.length > 0) {
+        const latest = data.records[0];
+        const timeStr = latest.timestamp || latest.created_at || 'Baru Saja';
+        updateTimestampDisplay(timeStr, data.source === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
+
+        // Sort ascending by height_level or ID so earlier scans are Blok 1 and latest is Blok N
+        const sorted = [...data.records].sort((a, b) => {
+          const hA = parseInt(a.height_level) || 0;
+          const hB = parseInt(b.height_level) || 0;
+          if (hA !== hB) return hA - hB;
+          const idA = parseInt(a.id) || 0;
+          const idB = parseInt(b.id) || 0;
+          return idA - idB;
+        });
+
+        const matrixFromDb = [];
+        let globalPeakCps = 0;
+        let peakChannelIdx = 1;
+        let totalSumCps = 0;
+        let totalCellCount = 0;
+
+        sorted.forEach(rec => {
+          let detData = rec.detector_data;
+          if (typeof detData === 'string') {
+            try { detData = JSON.parse(detData); } catch(e) {}
+          }
+          if (detData && Array.isArray(detData) && detData.length > 0) {
+            matrixFromDb.push(detData);
+            detData.forEach((cps, idx) => {
+              const numVal = Number(cps) || 0;
+              totalSumCps += numVal;
+              totalCellCount++;
+              if (numVal > globalPeakCps) {
+                globalPeakCps = numVal;
+                peakChannelIdx = idx + 1;
+              }
+            });
+          }
+        });
+
+        if (matrixFromDb.length > 0) {
+          const detectedRows = matrixFromDb.length;
+          const detectedCols = matrixFromDb[0].length;
+
+          APP_STATE.matrixData = matrixFromDb;
+          APP_STATE.totalHeights = detectedRows;
+          APP_STATE.currentHeight = detectedRows;
+          APP_STATE.totalLoops = latest.total_loops || Math.max(1, Math.ceil(detectedCols / 3));
+          APP_STATE.objectMaxCps = globalPeakCps || 17;
+          APP_STATE.totalChannels = detectedCols;
+          APP_STATE.objectName = resolvedObject;
+
+          // Select all loops for the newly loaded object
+          APP_STATE.selectedLoops.clear();
+          for (let i = 1; i <= detectedRows; i++) {
+            APP_STATE.selectedLoops.add(i);
+          }
+          APP_STATE.userModifiedLoops = false;
+
+          // Update HUD indicators
+          document.getElementById('headerHeightProgress').textContent = `${detectedRows} / ${detectedRows}`;
+          document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
+
+          // Update Quick Inputs
+          const qSteps = document.getElementById('inputTotalHeight');
+          if (qSteps) qSteps.value = detectedRows;
+          const qLoops = document.getElementById('inputTotalLoops');
+          if (qLoops) qLoops.value = APP_STATE.totalLoops;
+
+          // Update Total Channels KPI
+          const chEl = document.getElementById('metricTotalChannels');
+          if (chEl) chEl.innerHTML = `${detectedCols} <span class="kpi-unit">Ch</span>`;
+
+          // Update Module Zone markers strip
+          updateModuleMarkers(detectedCols);
+
+          // Update KPI telemetry
+          const avgCpsVal = totalCellCount > 0 ? (totalSumCps / totalCellCount).toFixed(1) : '0.0';
+          document.getElementById('metricActiveLoop').innerHTML = `${detectedRows} <span class="kpi-unit">/ ${detectedRows}</span>`;
+          document.getElementById('metricMaxCps').innerHTML = `${globalPeakCps} <span class="kpi-unit">cps</span>`;
+          
+          const chPerMod = Math.max(1, Math.ceil(detectedCols / 3));
+          let modLabel = 'XS1';
+          if (peakChannelIdx > chPerMod && peakChannelIdx <= chPerMod * 2) modLabel = 'XS2';
+          else if (peakChannelIdx > chPerMod * 2) modLabel = 'XS3';
+          document.getElementById('metricMaxChannel').textContent = `Detector D${peakChannelIdx < 10 ? '0' + peakChannelIdx : peakChannelIdx} (${modLabel})`;
+          document.getElementById('metricAvgCps').innerHTML = `${avgCpsVal} <span class="kpi-unit">cps</span>`;
+          document.getElementById('metricTotalCounts').innerHTML = `${totalSumCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
+
+          // Update 3D Estimated Localization & Hotspot Position
+          recompute3DSourceLocalization();
+
+          // Update individual detector readouts if visual elements present
+          updateIndividualChannelsVisual(matrixFromDb[matrixFromDb.length - 1]);
+
+          // Rebuild sidebar loops and render heatmap immediately
+          buildSidebarLoopList(true);
+          updateColorbarGradient();
+          renderMatrixHeatmap();
+          render3DSourceViewport();
+          renderTopViewXZ();
+          updateRawTable();
+          setSaveButtonState('ready');
+
+          if (showNotification) {
+            showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${resolvedObject}</b> (${matrixFromDb.length} baris blok | ${detectedCols} Detektor) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
+            logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${resolvedObject}</strong> (${matrixFromDb.length} baris level | ${detectedCols} Detektor | Peak: ${globalPeakCps} CPS)`);
+          }
+        }
+      } else {
+        updateTimestampDisplay('Belum ada data', 'READY');
+        APP_STATE.matrixData = [];
+        APP_STATE.totalHeights = 10;
+        APP_STATE.currentHeight = 0;
+        APP_STATE.objectMaxCps = 17;
+        APP_STATE.objectName = resolvedObject;
+        buildSidebarLoopList(true);
+        updateColorbarGradient();
+        renderMatrixHeatmap();
+        render3DSourceViewport();
+        renderTopViewXZ();
+        updateRawTable();
+        if (showNotification) {
+          showToast('info', 'Data Kosong', `Belum ada data rekaman pemindaian untuk objek <b>${resolvedObject}</b> di database.`);
+        }
+      }
     })
     .catch(err => {
-      if (err.name === 'AbortError') return;
       if (fetchId === activeTiDBFetchId) {
         console.warn("[History Fetch Error]", err);
         if (btn) btn.classList.remove('spinning');
@@ -3654,12 +3669,12 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false, isMan
 }
 
 function fetchInitialHistory() {
-  loadObjectDataFromTiDB('', false, false);
+  loadObjectDataFromTiDB('', false);
 
   // Background Auto-sync from TiDB Cloud every 10 seconds for active object
   setInterval(() => {
-    if (APP_STATE.objectName && !APP_STATE.isScanning) {
-      loadObjectDataFromTiDB(APP_STATE.objectName, false, false);
+    if (APP_STATE.objectName) {
+      loadObjectDataFromTiDB(APP_STATE.objectName, false);
     }
   }, 10000);
 }
