@@ -592,11 +592,11 @@
 const APP_STATE = {
   selectedComPort: 'COM5',
   selectedBaudrate: 115200,
-  totalHeights: 24,
+  totalHeights: 10,
   currentHeight: 0,
-  objectName: 'Gentong',
+  objectName: '', // Loaded dynamically from TiDB latest object
   objectMaxCps: 44,
-  totalLoops: 1,
+  totalLoops: 12,
   currentLoop: 1,
   transitionDelay: 0.3,
   sessionId: '',
@@ -1444,33 +1444,36 @@ function generateDummyModuleData(moduleId, isHotspot) {
   const targetPeak = (APP_STATE.objectMaxCps && APP_STATE.objectMaxCps > 0) ? APP_STATE.objectMaxCps : 44;
   const nameLower = (APP_STATE.objectName || '').toLowerCase();
   const isLowRadiationObj = targetPeak <= 100 || nameLower.includes('demo') || nameLower.includes('limbah');
+  const chPerMod = Math.max(1, Math.round((APP_STATE.totalChannels || 36) / 3));
 
   if (isLowRadiationObj) {
     const maxVal = targetPeak;
-    const minVal = Math.max(12, Math.floor(maxVal * 0.45));
-    for (let ch = 0; ch < 24; ch++) {
+    const minVal = Math.max(2, Math.floor(maxVal * 0.2));
+    for (let ch = 0; ch < chPerMod; ch++) {
       let val = Math.floor(Math.random() * (Math.max(minVal + 2, Math.floor(maxVal * 0.75)) - minVal + 1)) + minVal;
       if (isHotspot && moduleId === 2) {
-        const dist = Math.abs(ch - 14); // peak at XS2 ch 14
-        if (dist <= 4) {
-          const boost = Math.floor((maxVal - val) * Math.max(0.3, (1 - dist / 5)));
+        const peakIdx = Math.floor(chPerMod / 2);
+        const dist = Math.abs(ch - peakIdx);
+        if (dist <= 2) {
+          const boost = Math.floor((maxVal - val) * Math.max(0.3, (1 - dist / 3)));
           val = Math.min(maxVal, val + boost);
         }
       }
-      data.push(Math.min(maxVal, Math.max(8, val)));
+      data.push(Math.min(maxVal, Math.max(0, val)));
     }
   } else {
-    for (let ch = 0; ch < 24; ch++) {
+    for (let ch = 0; ch < chPerMod; ch++) {
       let base = Math.floor(Math.random() * 25) + 18;
       if (isHotspot && moduleId === 2) {
-        const dist = Math.abs(ch - 14); // peak at XS2 ch 14 (D38)
-        if (dist <= 5) {
-          const boost = Math.floor((Math.random() * 140 + 160) * Math.max(0.2, (1 - dist / 6)));
+        const peakIdx = Math.floor(chPerMod / 2);
+        const dist = Math.abs(ch - peakIdx);
+        if (dist <= 3) {
+          const boost = Math.floor((Math.random() * 140 + 160) * Math.max(0.2, (1 - dist / 4)));
           base += boost;
         } else {
           base += Math.floor(Math.random() * 35) + 20;
         }
-      } else if (isHotspot && (moduleId === 1 && ch > 18 || moduleId === 3 && ch < 6)) {
+      } else if (isHotspot && (moduleId === 1 && ch > chPerMod - 4 || moduleId === 3 && ch < 4)) {
         base += Math.floor(Math.random() * 30) + 10;
       }
       data.push(Math.min(targetPeak, base));
@@ -1493,7 +1496,9 @@ function openStartScanModal() {
   // Pre-fill modal inputs with currently selected TiDB object
   const selectObj = document.getElementById('selectActiveObject');
   let activeName = (selectObj && selectObj.value && selectObj.value !== 'ALL') ? selectObj.value : APP_STATE.objectName;
-  if (!activeName || activeName === 'ALL') activeName = 'Tong Baru';
+  if (!activeName || activeName === 'ALL') {
+    activeName = (selectObj && selectObj.options && selectObj.options.length > 0) ? selectObj.options[0].value : 'Sample_new';
+  }
 
   const nameInput = document.getElementById('modalInputObjectName');
   const stepsInput = document.getElementById('modalInputSteps');
@@ -1504,7 +1509,7 @@ function openStartScanModal() {
 
   if (nameInput) nameInput.value = activeName;
   if (stepsInput) stepsInput.value = APP_STATE.totalHeights || 10;
-  if (loopsInput) loopsInput.value = APP_STATE.totalLoops || 1;
+  if (loopsInput) loopsInput.value = APP_STATE.totalLoops || 12;
   if (delayInput) delayInput.value = (APP_STATE.transitionDelay !== undefined) ? APP_STATE.transitionDelay : 0.3;
   if (portInput) portInput.value = APP_STATE.selectedComPort || 'COM5';
   if (rateInput) rateInput.value = APP_STATE.samplingIntervalMs || 100;
@@ -1542,9 +1547,9 @@ function launchConfiguredScan() {
   const portInput = document.getElementById('modalInputComPort');
   const rateInput = document.getElementById('modalInputSamplingRate');
 
-  const objName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : 'Gentong';
+  const objName = (nameInput && nameInput.value.trim()) ? nameInput.value.trim() : (APP_STATE.objectName || 'Sample_new');
   const steps = (stepsInput && parseInt(stepsInput.value)) ? Math.max(1, parseInt(stepsInput.value)) : 10;
-  const loops = (loopsInput && parseInt(loopsInput.value)) ? Math.max(1, parseInt(loopsInput.value)) : 1;
+  const loops = (loopsInput && parseInt(loopsInput.value)) ? Math.max(1, parseInt(loopsInput.value)) : 12;
   const transDelay = (delayInput && !isNaN(parseFloat(delayInput.value))) ? Math.max(0, parseFloat(delayInput.value)) : 0.3;
   const port = (portInput && portInput.value) ? portInput.value : 'COM5';
   const rate = (rateInput && parseInt(rateInput.value)) ? parseInt(rateInput.value) : 100;
@@ -1555,6 +1560,9 @@ function launchConfiguredScan() {
   APP_STATE.transitionDelay = transDelay;
   APP_STATE.selectedComPort = port;
   APP_STATE.samplingIntervalMs = rate;
+  
+  // Set total channels: loops * 3 per module
+  APP_STATE.totalChannels = Math.max(15, loops * 3);
 
   closeStartScanModal();
 
@@ -1593,7 +1601,19 @@ function launchConfiguredScan() {
   const qRate = document.getElementById('inputSamplingRate');
   if (qRate) qRate.value = rate;
 
-  buildSidebarLoopList();
+  // Update Total Channels KPI & Module Markers
+  const chEl = document.getElementById('metricTotalChannels');
+  if (chEl) chEl.innerHTML = `${APP_STATE.totalChannels} <span class="kpi-unit">Ch</span>`;
+  updateModuleMarkers(APP_STATE.totalChannels);
+
+  APP_STATE.userModifiedLoops = false;
+  APP_STATE.selectedLoops.clear();
+  for (let i = 1; i <= steps; i++) {
+    APP_STATE.selectedLoops.add(i);
+  }
+  buildSidebarLoopList(true);
+  buildIndividualChannelsGrid();
+  buildDetectorDotsGrid();
 
   // Start actual acquisition
   startScanning(true);
@@ -1812,7 +1832,7 @@ function startScanning(fromModal = false) {
     document.getElementById('headerHeightProgress').textContent = `1 / ${APP_STATE.totalHeights}`;
     document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
 
-    logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops | Sampling: ${APP_STATE.samplingIntervalMs}ms | Delay: ${APP_STATE.transitionDelay}s`);
+    logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops (${APP_STATE.totalChannels} Ch) | Sampling: ${APP_STATE.samplingIntervalMs}ms | Delay: ${APP_STATE.transitionDelay}s`);
   }
 
   // Start Elapsed Timer
@@ -1848,23 +1868,23 @@ function executeScanCycle() {
     const d1 = generateDummyModuleData(1, hasAnomaly);
     const d2 = generateDummyModuleData(2, hasAnomaly);
     const d3 = generateDummyModuleData(3, hasAnomaly);
-    const full72 = [...d1, ...d2, ...d3];
+    const fullData = [...d1, ...d2, ...d3];
 
     // Update heatmap matrix representation
     if (APP_STATE.matrixData.length < h) {
-      APP_STATE.matrixData.push(full72);
+      APP_STATE.matrixData.push(fullData);
     } else {
-      APP_STATE.matrixData[h - 1] = full72;
+      APP_STATE.matrixData[h - 1] = fullData;
     }
 
     // Compute Averages
-    const avg1 = d1.reduce((a, b) => a + b, 0) / 24;
-    const avg2 = d2.reduce((a, b) => a + b, 0) / 24;
-    const avg3 = d3.reduce((a, b) => a + b, 0) / 24;
-    const maxCps = Math.max(...full72);
-    const maxChannelIndex = full72.indexOf(maxCps) + 1;
-    const totalCps = full72.reduce((a, b) => a + b, 0);
-    const globalAvg = (totalCps / 72).toFixed(1);
+    const avg1 = d1.length > 0 ? (d1.reduce((a, b) => a + b, 0) / d1.length) : 0;
+    const avg2 = d2.length > 0 ? (d2.reduce((a, b) => a + b, 0) / d2.length) : 0;
+    const avg3 = d3.length > 0 ? (d3.reduce((a, b) => a + b, 0) / d3.length) : 0;
+    const maxCps = fullData.length > 0 ? Math.max(...fullData) : 0;
+    const maxChannelIndex = fullData.indexOf(maxCps) + 1;
+    const totalCps = fullData.reduce((a, b) => a + b, 0);
+    const globalAvg = fullData.length > 0 ? (totalCps / fullData.length).toFixed(1) : '0.0';
     const nowTs = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
     // Store in sessionRecords for batch/single save
@@ -1872,7 +1892,7 @@ function executeScanCycle() {
       timestamp: nowTs,
       height: h,
       loop_index: l,
-      detector_data: full72,
+      detector_data: fullData,
       xs1_data: d1,
       xs2_data: d2,
       xs3_data: d3,
@@ -1889,8 +1909,14 @@ function executeScanCycle() {
     if (elAct) elAct.innerHTML = `${h} <span class="kpi-unit">/ ${APP_STATE.totalHeights}</span>`;
     const elMax = document.getElementById('metricMaxCps');
     if (elMax) elMax.innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
+    
+    const chPerMod = Math.max(1, Math.ceil(fullData.length / 3));
+    let modLabel = 'XS1';
+    if (maxChannelIndex > chPerMod && maxChannelIndex <= chPerMod * 2) modLabel = 'XS2';
+    else if (maxChannelIndex > chPerMod * 2) modLabel = 'XS3';
+    
     const elMaxCh = document.getElementById('metricMaxChannel');
-    if (elMaxCh) elMaxCh.textContent = `Detector D${maxChannelIndex} (XS${maxChannelIndex <= 24 ? 1 : (maxChannelIndex <= 48 ? 2 : 3)})`;
+    if (elMaxCh) elMaxCh.textContent = `Detector D${maxChannelIndex < 10 ? '0' + maxChannelIndex : maxChannelIndex} (${modLabel})`;
     const elAvg = document.getElementById('metricAvgCps');
     if (elAvg) elAvg.innerHTML = `${globalAvg} <span class="kpi-unit">cps</span>`;
     const elTot = document.getElementById('metricTotalCounts');
@@ -1915,7 +1941,7 @@ function executeScanCycle() {
       const sConfV = document.getElementById('statConfidenceVal');
       if (sConfV) sConfV.textContent = `${APP_STATE.estimatedSource.confidence}%`;
       const sHs = document.getElementById('statHotspotCount');
-      if (sHs) sHs.textContent = `XS2 (D${maxChannelIndex})`;
+      if (sHs) sHs.textContent = `${modLabel} (D${maxChannelIndex < 10 ? '0' + maxChannelIndex : maxChannelIndex})`;
     }
 
     // Update Real-time Chart
@@ -1933,8 +1959,8 @@ function executeScanCycle() {
       telemetryChart.update();
     }
 
-    // Update individual 72 channels & micro strip
-    updateIndividualChannelsVisual(full72);
+    // Update individual channels & micro strip
+    updateIndividualChannelsVisual(fullData);
 
     // Log to Terminal Screen
     const statusTag = maxCps >= APP_STATE.hotspotThreshold ? '<span class="log-badge-alert">[HOTSPOT]</span>' : '<span class="log-badge-ok">[NORMAL]</span>';
@@ -1942,7 +1968,7 @@ function executeScanCycle() {
 
     // Push to Firebase RTDB if active
     if (APP_STATE.useFirebase && typeof firebaseDb !== 'undefined' && firebaseDb) {
-      pushToFirebase(h, l, full72, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
+      pushToFirebase(h, l, fullData, d1, d2, d3, maxCps, maxChannelIndex, globalAvg);
     }
 
     // Highlight Sidebar Loop item
@@ -3043,10 +3069,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 2. Latest Scan Readings Sync
+    // 2. Latest Scan Readings Sync (Hanya jika objek sesuai dengan yang sedang dibuka)
     firebaseDb.ref('radiation_scans/latest').on('value', (snapshot) => {
       const val = snapshot.val();
-      if (val && val.full_72_array) {
+      if (val && val.full_72_array && val.object_name === APP_STATE.objectName) {
         const ts = val.timestamp || new Date().toLocaleTimeString('id-ID');
         updateTimestampDisplay(ts, 'LIVE FIREBASE');
         if (!APP_STATE.isScanning) {
@@ -3058,10 +3084,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 3. Matrix Data Sync
+    // 3. Matrix Data Sync (Hanya jika objek sesuai dengan yang sedang dibuka)
     firebaseDb.ref('radiation_scans/matrix_data').on('value', (snapshot) => {
       const val = snapshot.val();
-      if (val && val.matrix && !APP_STATE.isScanning) {
+      if (val && val.matrix && val.object_name === APP_STATE.objectName && !APP_STATE.isScanning) {
         if (val.last_updated) updateTimestampDisplay(val.last_updated, 'FIREBASE RTDB');
         APP_STATE.matrixData = val.matrix;
         renderMatrixHeatmap();
@@ -3158,7 +3184,8 @@ function populateObjectDropdown(availableObjects, currentSelected) {
   const datalist = document.getElementById('tidbObjectDatalist');
   if (!selectEl) return;
 
-  const prevVal = selectEl.value;
+  const activeTarget = currentSelected || APP_STATE.objectName || selectEl.value;
+
   selectEl.innerHTML = '';
 
   let matchFound = false;
@@ -3167,25 +3194,16 @@ function populateObjectDropdown(availableObjects, currentSelected) {
     if (datalist) datalist.innerHTML = '';
     if (presetContainer) presetContainer.innerHTML = '';
 
-    // If currentSelected is empty or ALL, default to the first available object
-    if (!currentSelected || currentSelected === 'ALL') {
-      currentSelected = availableObjects[0].object_name;
-    }
-
-    availableObjects.forEach((obj, idx) => {
+    availableObjects.forEach((obj) => {
       const opt = document.createElement('option');
       opt.value = obj.object_name;
       const count = obj.total_records || 0;
       const loops = obj.loops || (obj.total_loops || 1);
       opt.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
       
-      if (currentSelected && (currentSelected === obj.object_name || currentSelected === obj.object_name.trim())) {
+      if (activeTarget && (activeTarget === obj.object_name || activeTarget === obj.object_name.trim())) {
         opt.selected = true;
         matchFound = true;
-      } else if (!currentSelected && idx === 0) {
-        opt.selected = true;
-        matchFound = true;
-        currentSelected = obj.object_name;
       }
       selectEl.appendChild(opt);
 
@@ -3199,7 +3217,7 @@ function populateObjectDropdown(availableObjects, currentSelected) {
       // Add to Modal Preset Tags
       if (presetContainer) {
         const tag = document.createElement('span');
-        tag.className = `preset-tag ${currentSelected === obj.object_name ? 'active' : ''}`;
+        tag.className = `preset-tag ${activeTarget === obj.object_name ? 'active' : ''}`;
         tag.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
         tag.title = `Loop: ${loops} | Terakhir: ${obj.last_ts || '-'}`;
         tag.onclick = () => selectObjectPreset(obj.object_name);
@@ -3208,15 +3226,15 @@ function populateObjectDropdown(availableObjects, currentSelected) {
     });
   }
 
-  if (!matchFound && currentSelected && currentSelected !== 'ALL') {
+  if (!matchFound && activeTarget) {
     const customOpt = document.createElement('option');
-    customOpt.value = currentSelected;
-    customOpt.textContent = `${currentSelected} (Aktif)`;
+    customOpt.value = activeTarget;
+    customOpt.textContent = `${activeTarget} (Aktif)`;
     customOpt.selected = true;
-    selectEl.appendChild(customOpt);
-  } else if (!matchFound && prevVal && prevVal !== 'ALL') {
-    selectEl.value = prevVal;
+    selectEl.insertBefore(customOpt, selectEl.firstChild);
   }
+
+  selectEl.value = activeTarget || (availableObjects[0] ? availableObjects[0].object_name : 'Sample_new');
 }
 
 function onObjectSelectChange(selectedName) {
@@ -3226,6 +3244,9 @@ function onObjectSelectChange(selectedName) {
   }
   APP_STATE.userModifiedLoops = false;
   APP_STATE.selectedLoops.clear();
+  APP_STATE.sessionRecords = [];
+  APP_STATE.saveState = 'idle';
+  setSaveButtonState('idle');
   APP_STATE.objectName = selectedName;
   loadObjectDataFromTiDB(selectedName, true);
 }
@@ -3234,19 +3255,18 @@ function refreshAvailableObjects(isManual = false) {
   const btn = document.getElementById('btnRefreshObjects');
   if (btn) btn.classList.add('spinning');
   
-  const selectEl = document.getElementById('selectActiveObject');
-  const currentObj = selectEl ? selectEl.value : '';
-
-  loadObjectDataFromTiDB(currentObj, isManual);
+  const targetObj = APP_STATE.objectName || (document.getElementById('selectActiveObject') ? document.getElementById('selectActiveObject').value : '');
+  loadObjectDataFromTiDB(targetObj, isManual);
 }
 
 function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
   const btn = document.getElementById('btnRefreshObjects');
   if (btn) btn.classList.add('spinning');
 
+  const queryTarget = objectName || APP_STATE.objectName || '';
   let url = '/matrix-data/history';
-  if (objectName && objectName !== 'ALL') {
-    url += '?object_name=' + encodeURIComponent(objectName);
+  if (queryTarget && queryTarget !== 'ALL') {
+    url += '?object_name=' + encodeURIComponent(queryTarget);
   }
 
   fetch(url)
@@ -3257,7 +3277,7 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
     .then(data => {
       if (btn) btn.classList.remove('spinning');
 
-      const resolvedObject = data.current_object || (data.available_objects && data.available_objects[0] ? data.available_objects[0].object_name : 'Sample_new');
+      const resolvedObject = queryTarget || data.current_object || (data.available_objects && data.available_objects[0] ? data.available_objects[0].object_name : 'Sample_new');
 
       // 1. Update dropdown and modal inputs from TiDB Cloud
       if (data.available_objects) {
@@ -3313,7 +3333,7 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           APP_STATE.matrixData = matrixFromDb;
           APP_STATE.totalHeights = detectedRows;
           APP_STATE.currentHeight = detectedRows;
-          APP_STATE.totalLoops = latest.total_loops || 1;
+          APP_STATE.totalLoops = latest.total_loops || Math.max(1, Math.ceil(detectedCols / 3));
           APP_STATE.objectMaxCps = globalPeakCps || 17;
           APP_STATE.totalChannels = detectedCols;
           APP_STATE.objectName = resolvedObject;
@@ -3386,6 +3406,17 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
         }
       } else {
         updateTimestampDisplay('Belum ada data', 'READY');
+        APP_STATE.matrixData = [];
+        APP_STATE.totalHeights = 10;
+        APP_STATE.currentHeight = 0;
+        APP_STATE.objectMaxCps = 17;
+        APP_STATE.objectName = resolvedObject;
+        buildSidebarLoopList(true);
+        updateColorbarGradient();
+        renderMatrixHeatmap();
+        render3DSourceViewport();
+        renderTopViewXZ();
+        updateRawTable();
         if (showNotification) {
           showToast('info', 'Data Kosong', `Belum ada data rekaman pemindaian untuk objek <b>${resolvedObject}</b> di database.`);
         }
@@ -3403,14 +3434,12 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
 function fetchInitialHistory() {
   loadObjectDataFromTiDB('', false);
 
-  // Background Auto-sync from TiDB Cloud every 8 seconds
+  // Background Auto-sync from TiDB Cloud every 10 seconds for active object
   setInterval(() => {
-    if (!APP_STATE.isScanning && !APP_STATE.isPaused) {
-      const selectEl = document.getElementById('selectActiveObject');
-      const activeObj = selectEl ? selectEl.value : '';
-      loadObjectDataFromTiDB(activeObj, false);
+    if (!APP_STATE.isScanning && !APP_STATE.isPaused && APP_STATE.saveState !== 'ready' && APP_STATE.objectName) {
+      loadObjectDataFromTiDB(APP_STATE.objectName, false);
     }
-  }, 8000);
+  }, 10000);
 }
 
 </script>
