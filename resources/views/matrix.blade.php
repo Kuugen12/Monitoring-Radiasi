@@ -837,6 +837,92 @@ function updateChartTheme(isLight) {
   telemetryChart.update();
 }
 
+// 5. 3D & 2D SOURCE LOCALIZATION COMPUTATION ENGINE
+function recompute3DSourceLocalization() {
+  if (!APP_STATE.matrixData || APP_STATE.matrixData.length === 0) return;
+
+  const numRows = APP_STATE.matrixData.length;
+  const numCols = (APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0) ? APP_STATE.matrixData[0].length : 72;
+  
+  let globalPeakCps = 0;
+  let peakRow = 0;
+  let peakCol = 0;
+  let totalWeight = 0;
+  let weightedCol = 0;
+  let weightedRow = 0;
+
+  for (let r = 0; r < numRows; r++) {
+    const row = APP_STATE.matrixData[r];
+    if (!row) continue;
+    for (let c = 0; c < numCols; c++) {
+      const val = Number(row[c]) || 0;
+      if (val > globalPeakCps) {
+        globalPeakCps = val;
+        peakRow = r;
+        peakCol = c;
+      }
+      // Weight values above background baseline for sub-cell centroid localization
+      const threshold = Math.max(20, (APP_STATE.hotspotThreshold || 100) * 0.3);
+      if (val > threshold) {
+        const w = Math.pow(val - threshold, 1.5);
+        weightedCol += c * w;
+        weightedRow += r * w;
+        totalWeight += w;
+      }
+    }
+  }
+
+  // Exact continuous / sub-pixel center of radiation hotspot
+  const centerCol = (totalWeight > 0) ? (weightedCol / totalWeight) : peakCol;
+  const centerRow = (totalWeight > 0) ? (weightedRow / totalWeight) : peakRow;
+
+  // Physical coordinates:
+  // X: 0 cm to 800 cm across detector columns (Column 0 = 0 cm, Column numCols - 1 = 800 cm)
+  const estX = numCols > 1 ? Number(((centerCol / (numCols - 1)) * 800).toFixed(1)) : 400.0;
+  
+  // Z: height in cm. Each row r (0 to numRows-1) corresponds to height (r + 1) * 35 cm
+  // (e.g. Row 0 = 35 cm, Row 1 = 70 cm, ..., Row N-1 = N * 35 cm)
+  const estZ = Number(((centerRow + 1) * 35).toFixed(1));
+  const estY = -30.0; // Distance / Depth offset in cm
+
+  const confidence = globalPeakCps > 0 
+    ? Math.min(99.0, 70.0 + (globalPeakCps / 350) * 28).toFixed(1)
+    : '60.0';
+
+  APP_STATE.estimatedSource = {
+    x: estX,
+    y: estY,
+    z: estZ,
+    confidence: confidence,
+    centerCol: centerCol,
+    centerRow: centerRow,
+    peakCol: peakCol,
+    peakRow: peakRow,
+    peakCps: globalPeakCps
+  };
+
+  // Update UI stats in HUD
+  const spX = document.getElementById('statPosX');
+  if (spX) spX.textContent = `${estX} cm`;
+  const spY = document.getElementById('statPosY');
+  if (spY) spY.textContent = `${estY} cm`;
+  const spZ = document.getElementById('statPosZ');
+  if (spZ) spZ.textContent = `${estZ} cm`;
+  const sConf = document.getElementById('statConfidence');
+  if (sConf) sConf.textContent = `${confidence}% Confidence`;
+  const sConfV = document.getElementById('statConfidenceVal');
+  if (sConfV) sConfV.textContent = `${confidence}%`;
+
+  const peakDetectorNumber = peakCol + 1;
+  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
+  let modLabel = 'XS1';
+  if (peakDetectorNumber > chPerMod && peakDetectorNumber <= chPerMod * 2) modLabel = 'XS2';
+  else if (peakDetectorNumber > chPerMod * 2) modLabel = 'XS3';
+  
+  const sHs = document.getElementById('statHotspotCount');
+  if (sHs) sHs.textContent = `${modLabel} (D${peakDetectorNumber < 10 ? '0' + peakDetectorNumber : peakDetectorNumber})`;
+}
+
 // 5. HEATMAP CANVAS RENDERING ENGINE
 const canvas = document.getElementById('matrixHeatmapCanvas');
 const ctx = canvas.getContext('2d');
@@ -1046,17 +1132,50 @@ function renderContourView(width, height) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  const cx = (APP_STATE.estimatedSource.x / 800) * width;
-  const cy = ((350 - APP_STATE.estimatedSource.z) / 350) * height;
+  // Position of hotspot centroid / peak on contour plane:
+  // Column 0 is at px = 0, Column (numCols - 1) is at px = width.
+  // Row 0 (Blok 1, bottom) is at py = height, Row (numRows - 1) (Top Blok) is at py = 0.
+  let centerCol = 0;
+  let centerRow = 0;
+  if (APP_STATE.estimatedSource && APP_STATE.estimatedSource.centerCol !== undefined) {
+    centerCol = APP_STATE.estimatedSource.centerCol;
+    centerRow = APP_STATE.estimatedSource.centerRow;
+  } else if (APP_STATE.estimatedSource) {
+    centerCol = (APP_STATE.estimatedSource.x / 800) * (numCols - 1);
+    centerRow = (APP_STATE.estimatedSource.z / 35) - 1;
+  }
 
+  const cx = numCols > 1 ? (centerCol / (numCols - 1)) * width : width / 2;
+  const cy = numRows > 1 ? ((numRows - 1 - centerRow) / (numRows - 1)) * height : height / 2;
+
+  // Draw glowing red hotspot locator target
+  ctx.save();
+  const glow = ctx.createRadialGradient(cx, cy, 2, cx, cy, 18);
+  glow.addColorStop(0, 'rgba(239, 68, 68, 0.7)');
+  glow.addColorStop(0.5, 'rgba(239, 68, 68, 0.25)');
+  glow.addColorStop(1, 'rgba(239, 68, 68, 0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Solid center dot
   ctx.fillStyle = '#EF4444';
   ctx.beginPath();
-  ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 6.5, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 2.5;
   ctx.stroke();
+
+  // Outer target ring
+  ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // 7. CELL MATRIX VIEW (GRID VIEW)
@@ -1143,13 +1262,16 @@ function render3DSourceViewport() {
     return { px: isoX, py: isoY };
   }
 
+  // Dynamic max Z in 3D viewport
+  const maxZ3D = Math.max(350, (APP_STATE.totalHeights || 10) * 35);
+
   // 3D Bounding Cube Wireframe
   ctx3D.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.35)' : 'rgba(59, 130, 246, 0.25)';
   ctx3D.lineWidth = 1;
 
   const corners = [
     project3D(0, -100, 0), project3D(800, -100, 0), project3D(800, 100, 0), project3D(0, 100, 0),
-    project3D(0, -100, 400), project3D(800, -100, 400), project3D(800, 100, 400), project3D(0, 100, 400)
+    project3D(0, -100, maxZ3D), project3D(800, -100, maxZ3D), project3D(800, 100, maxZ3D), project3D(0, 100, maxZ3D)
   ];
 
   ctx3D.beginPath();
@@ -1179,12 +1301,13 @@ function render3DSourceViewport() {
   ctx3D.font = '9px "IBM Plex Mono"';
   const pXLabel = project3D(820, 0, 0);
   ctx3D.fillText("X: 800cm", pXLabel.px, pXLabel.py);
-  const pZLabel = project3D(0, 0, 420);
-  ctx3D.fillText("Z: 400cm", pZLabel.px, pZLabel.py);
+  const pZLabel = project3D(0, 0, maxZ3D + 20);
+  ctx3D.fillText(`Z: ${maxZ3D}cm`, pZLabel.px, pZLabel.py);
 
   // Active Linear Array Bar
-  const dStart = project3D(0, 0, APP_STATE.currentHeight * 35);
-  const dEnd = project3D(800, 0, APP_STATE.currentHeight * 35);
+  const curH = Math.max(1, APP_STATE.currentHeight || 1);
+  const dStart = project3D(0, 0, curH * 35);
+  const dEnd = project3D(800, 0, curH * 35);
   ctx3D.strokeStyle = isLight ? '#059669' : '#34D399';
   ctx3D.lineWidth = 2.5;
   ctx3D.beginPath();
@@ -1193,7 +1316,7 @@ function render3DSourceViewport() {
   ctx3D.stroke();
 
   // Estimated Source Sphere
-  const src = APP_STATE.estimatedSource;
+  const src = APP_STATE.estimatedSource || { x: 400, y: -30, z: 175 };
   const pSrc = project3D(src.x, src.y, src.z);
   const pBase = project3D(src.x, src.y, 0);
 
@@ -1263,8 +1386,10 @@ function renderTopViewXZ() {
   ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.4)' : 'rgba(59, 130, 246, 0.4)';
   ctxTop.strokeRect(padding, padding, plotW, plotH);
 
-  const srcX = padding + (APP_STATE.estimatedSource.x / 800) * plotW;
-  const srcZ = padding + ((350 - APP_STATE.estimatedSource.z) / 350) * plotH;
+  const maxZ = Math.max(175, (APP_STATE.totalHeights || 10) * 35);
+  const src = APP_STATE.estimatedSource || { x: 400, z: 175 };
+  const srcX = padding + (Math.max(0, Math.min(800, src.x)) / 800) * plotW;
+  const srcZ = padding + ((maxZ - Math.max(0, Math.min(maxZ, src.z))) / maxZ) * plotH;
 
   ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.6)';
   ctxTop.setLineDash([3, 3]);
@@ -1287,7 +1412,7 @@ function renderTopViewXZ() {
 
 // 10. TOOLTIP & MOUSE INTERACTION
 canvas.addEventListener('mousemove', (e) => {
-  if (APP_STATE.viewMode !== 'matrix') return;
+  if (APP_STATE.viewMode !== 'matrix' && APP_STATE.viewMode !== 'contour') return;
 
   const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
     ? APP_STATE.matrixData[0].length
@@ -1301,12 +1426,14 @@ canvas.addEventListener('mousemove', (e) => {
   const mouseX = (e.clientX - rect.left) * scaleX;
   const mouseY = (e.clientY - rect.top) * scaleY;
 
-  const col = Math.floor(mouseX / (canvas.width / numCols));
-  const row = Math.floor(mouseY / (canvas.height / numRows));
+  const col = Math.max(0, Math.min(numCols - 1, Math.floor(mouseX / (canvas.width / numCols))));
+  const row = Math.max(0, Math.min(numRows - 1, Math.floor(mouseY / (canvas.height / numRows))));
 
   if (col >= 0 && col < numCols && row >= 0 && row < numRows) {
     hoveredCell = { row, col };
-    renderMatrixHeatmap();
+    if (APP_STATE.viewMode === 'matrix') {
+      renderMatrixHeatmap();
+    }
 
     const tooltip = document.getElementById('matrixTooltip');
     const detNumber = col + 1;
@@ -1922,27 +2049,8 @@ function executeScanCycle() {
     const elTot = document.getElementById('metricTotalCounts');
     if (elTot) elTot.innerHTML = `${totalCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
 
-    // Update Estimated Source Coordinates
-    if (hasAnomaly || maxCps > 100) {
-      APP_STATE.estimatedSource = {
-        x: 416.4 + (Math.random() * 4 - 2),
-        y: -32.4 + (Math.random() * 2 - 1),
-        z: (h * 35) + (Math.random() * 4 - 2),
-        confidence: Math.min(98.8, 85.0 + (maxCps / 350) * 13).toFixed(1)
-      };
-      const spX = document.getElementById('statPosX');
-      if (spX) spX.textContent = `${APP_STATE.estimatedSource.x.toFixed(1)} cm`;
-      const spY = document.getElementById('statPosY');
-      if (spY) spY.textContent = `${APP_STATE.estimatedSource.y.toFixed(1)} cm`;
-      const spZ = document.getElementById('statPosZ');
-      if (spZ) spZ.textContent = `${APP_STATE.estimatedSource.z.toFixed(1)} cm`;
-      const sConf = document.getElementById('statConfidence');
-      if (sConf) sConf.textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
-      const sConfV = document.getElementById('statConfidenceVal');
-      if (sConfV) sConfV.textContent = `${APP_STATE.estimatedSource.confidence}%`;
-      const sHs = document.getElementById('statHotspotCount');
-      if (sHs) sHs.textContent = `${modLabel} (D${maxChannelIndex < 10 ? '0' + maxChannelIndex : maxChannelIndex})`;
-    }
+    // Update Estimated Source Coordinates & Hotspot Position
+    recompute3DSourceLocalization();
 
     // Update Real-time Chart
     if (typeof telemetryChart !== 'undefined' && telemetryChart && telemetryChart.data) {
@@ -2307,7 +2415,10 @@ function updateSamplingInterval(val) {
 
 function updateThreshold(val) {
   APP_STATE.hotspotThreshold = parseInt(val) || 100;
+  recompute3DSourceLocalization();
   renderMatrixHeatmap();
+  render3DSourceViewport();
+  renderTopViewXZ();
 }
 
 function changeColorPalette(palette) {
@@ -3385,24 +3496,8 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           document.getElementById('metricAvgCps').innerHTML = `${avgCpsVal} <span class="kpi-unit">cps</span>`;
           document.getElementById('metricTotalCounts').innerHTML = `${totalSumCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
 
-          // Update 3D Estimated Localization
-          if (globalPeakCps >= APP_STATE.hotspotThreshold) {
-            const peakHeightRow = matrixFromDb.findIndex(row => row.includes(globalPeakCps));
-            const estZ = peakHeightRow >= 0 ? (peakHeightRow + 1) * 35 : 175;
-            const estX = Math.round((peakChannelIdx / detectedCols) * 800);
-            APP_STATE.estimatedSource = {
-              x: estX,
-              y: -30.0,
-              z: estZ,
-              confidence: Math.min(99.0, 88.0 + (globalPeakCps / 800) * 11).toFixed(1)
-            };
-            document.getElementById('statPosX').textContent = `${APP_STATE.estimatedSource.x} cm`;
-            document.getElementById('statPosY').textContent = `${APP_STATE.estimatedSource.y} cm`;
-            document.getElementById('statPosZ').textContent = `${APP_STATE.estimatedSource.z} cm`;
-            document.getElementById('statConfidence').textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
-            document.getElementById('statConfidenceVal').textContent = `${APP_STATE.estimatedSource.confidence}%`;
-            document.getElementById('statHotspotCount').textContent = `${modLabel} (D${peakChannelIdx < 10 ? '0' + peakChannelIdx : peakChannelIdx})`;
-          }
+          // Update 3D Estimated Localization & Hotspot Position
+          recompute3DSourceLocalization();
 
           // Update individual detector readouts if visual elements present
           updateIndividualChannelsVisual(matrixFromDb[matrixFromDb.length - 1]);
