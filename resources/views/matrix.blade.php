@@ -3069,25 +3069,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // 2. Latest Scan Readings Sync (Hanya jika objek sesuai dengan yang sedang dibuka)
+    // 2. Latest Scan Readings Sync (Hanya saat pemindaian aktif dan objek sesuai)
     firebaseDb.ref('radiation_scans/latest').on('value', (snapshot) => {
       const val = snapshot.val();
-      if (val && val.full_72_array && val.object_name === APP_STATE.objectName) {
+      if (val && (val.full_72_array || val.detector_data) && val.object_name === APP_STATE.objectName && APP_STATE.isScanning) {
         const ts = val.timestamp || new Date().toLocaleTimeString('id-ID');
         updateTimestampDisplay(ts, 'LIVE FIREBASE');
-        if (!APP_STATE.isScanning) {
-          logTerminal(`<span class="log-badge-ok">[FIREBASE]</span> Remote Height ${val.current_height} (Peak: ${val.max_cps} CPS)`);
-          APP_STATE.currentHeight = val.current_height;
-          if (val.estimated_source_3d) APP_STATE.estimatedSource = val.estimated_source_3d;
-          updateIndividualChannelsVisual(val.full_72_array);
-        }
+        logTerminal(`<span class="log-badge-ok">[FIREBASE]</span> Remote Height ${val.current_height} (Peak: ${val.max_cps} CPS)`);
+        APP_STATE.currentHeight = val.current_height;
+        if (val.estimated_source_3d) APP_STATE.estimatedSource = val.estimated_source_3d;
+        updateIndividualChannelsVisual(val.full_72_array || val.detector_data);
       }
     });
 
-    // 3. Matrix Data Sync (Hanya jika objek sesuai dengan yang sedang dibuka)
+    // 3. Matrix Data Sync (Hanya saat pemindaian aktif dan objek sesuai)
     firebaseDb.ref('radiation_scans/matrix_data').on('value', (snapshot) => {
       const val = snapshot.val();
-      if (val && val.matrix && val.object_name === APP_STATE.objectName && !APP_STATE.isScanning) {
+      if (val && val.matrix && val.object_name === APP_STATE.objectName && APP_STATE.isScanning) {
         if (val.last_updated) updateTimestampDisplay(val.last_updated, 'FIREBASE RTDB');
         APP_STATE.matrixData = val.matrix;
         renderMatrixHeatmap();
@@ -3178,6 +3176,8 @@ function updateTimestampDisplay(timeStr, sourceLabel = 'TiDB CLOUD') {
   if (elKpiBadge && sourceLabel) elKpiBadge.textContent = sourceLabel;
 }
 
+let activeTiDBFetchId = 0;
+
 function populateObjectDropdown(availableObjects, currentSelected) {
   const selectEl = document.getElementById('selectActiveObject');
   const presetContainer = document.getElementById('modalPresetTagList');
@@ -3186,55 +3186,51 @@ function populateObjectDropdown(availableObjects, currentSelected) {
 
   const activeTarget = currentSelected || APP_STATE.objectName || selectEl.value;
 
-  selectEl.innerHTML = '';
-
-  let matchFound = false;
-
   if (Array.isArray(availableObjects) && availableObjects.length > 0) {
-    if (datalist) datalist.innerHTML = '';
-    if (presetContainer) presetContainer.innerHTML = '';
+    const currentOptions = Array.from(selectEl.options).map(o => o.value);
+    const newOptions = availableObjects.map(o => o.object_name);
+    const isSameList = currentOptions.length === newOptions.length && currentOptions.every((val, idx) => val === newOptions[idx]);
 
-    availableObjects.forEach((obj) => {
-      const opt = document.createElement('option');
-      opt.value = obj.object_name;
-      const count = obj.total_records || 0;
-      const loops = obj.loops || (obj.total_loops || 1);
-      opt.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
-      
-      if (activeTarget && (activeTarget === obj.object_name || activeTarget === obj.object_name.trim())) {
-        opt.selected = true;
-        matchFound = true;
-      }
-      selectEl.appendChild(opt);
+    if (!isSameList) {
+      selectEl.innerHTML = '';
+      if (datalist) datalist.innerHTML = '';
+      if (presetContainer) presetContainer.innerHTML = '';
 
-      // Add to Datalist for Modal Auto-complete
-      if (datalist) {
-        const dlOpt = document.createElement('option');
-        dlOpt.value = obj.object_name;
-        datalist.appendChild(dlOpt);
-      }
+      availableObjects.forEach((obj) => {
+        const opt = document.createElement('option');
+        opt.value = obj.object_name;
+        const count = obj.total_records || 0;
+        const loops = obj.loops || (obj.total_loops || 1);
+        opt.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
+        
+        if (activeTarget && (activeTarget === obj.object_name || activeTarget === obj.object_name.trim())) {
+          opt.selected = true;
+        }
+        selectEl.appendChild(opt);
 
-      // Add to Modal Preset Tags
-      if (presetContainer) {
-        const tag = document.createElement('span');
-        tag.className = `preset-tag ${activeTarget === obj.object_name ? 'active' : ''}`;
-        tag.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
-        tag.title = `Loop: ${loops} | Terakhir: ${obj.last_ts || '-'}`;
-        tag.onclick = () => selectObjectPreset(obj.object_name);
-        presetContainer.appendChild(tag);
-      }
-    });
+        // Add to Datalist for Modal Auto-complete
+        if (datalist) {
+          const dlOpt = document.createElement('option');
+          dlOpt.value = obj.object_name;
+          datalist.appendChild(dlOpt);
+        }
+
+        // Add to Modal Preset Tags
+        if (presetContainer) {
+          const tag = document.createElement('span');
+          tag.className = `preset-tag ${activeTarget === obj.object_name ? 'active' : ''}`;
+          tag.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
+          tag.title = `Loop: ${loops} | Terakhir: ${obj.last_ts || '-'}`;
+          tag.onclick = () => selectObjectPreset(obj.object_name);
+          presetContainer.appendChild(tag);
+        }
+      });
+    }
   }
 
-  if (!matchFound && activeTarget) {
-    const customOpt = document.createElement('option');
-    customOpt.value = activeTarget;
-    customOpt.textContent = `${activeTarget} (Aktif)`;
-    customOpt.selected = true;
-    selectEl.insertBefore(customOpt, selectEl.firstChild);
+  if (activeTarget) {
+    selectEl.value = activeTarget;
   }
-
-  selectEl.value = activeTarget || (availableObjects[0] ? availableObjects[0].object_name : 'Sample_new');
 }
 
 function onObjectSelectChange(selectedName) {
@@ -3242,12 +3238,17 @@ function onObjectSelectChange(selectedName) {
     showToast('warning', 'Sedang Memindai', 'Harap tunggu atau hentikan pemindaian sebelum mengganti objek.');
     return;
   }
+  if (!selectedName || selectedName === 'ALL') return;
+
   APP_STATE.userModifiedLoops = false;
-  APP_STATE.selectedLoops.clear();
   APP_STATE.sessionRecords = [];
   APP_STATE.saveState = 'idle';
   setSaveButtonState('idle');
   APP_STATE.objectName = selectedName;
+
+  const selectEl = document.getElementById('selectActiveObject');
+  if (selectEl) selectEl.value = selectedName;
+
   loadObjectDataFromTiDB(selectedName, true);
 }
 
@@ -3260,10 +3261,15 @@ function refreshAvailableObjects(isManual = false) {
 }
 
 function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
+  const fetchId = ++activeTiDBFetchId;
   const btn = document.getElementById('btnRefreshObjects');
   if (btn) btn.classList.add('spinning');
 
   const queryTarget = objectName || APP_STATE.objectName || '';
+  if (queryTarget && queryTarget !== 'ALL') {
+    APP_STATE.objectName = queryTarget;
+  }
+
   let url = '/matrix-data/history';
   if (queryTarget && queryTarget !== 'ALL') {
     url += '?object_name=' + encodeURIComponent(queryTarget);
@@ -3275,6 +3281,11 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
       return res.json();
     })
     .then(data => {
+      // Discard stale background responses if user switched objects
+      if (fetchId !== activeTiDBFetchId) {
+        return;
+      }
+
       if (btn) btn.classList.remove('spinning');
 
       const resolvedObject = queryTarget || data.current_object || (data.available_objects && data.available_objects[0] ? data.available_objects[0].object_name : 'Sample_new');
@@ -3328,7 +3339,6 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
         if (matrixFromDb.length > 0) {
           const detectedRows = matrixFromDb.length;
           const detectedCols = matrixFromDb[0].length;
-          const prevTotalHeights = APP_STATE.totalHeights;
 
           APP_STATE.matrixData = matrixFromDb;
           APP_STATE.totalHeights = detectedRows;
@@ -3337,6 +3347,13 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           APP_STATE.objectMaxCps = globalPeakCps || 17;
           APP_STATE.totalChannels = detectedCols;
           APP_STATE.objectName = resolvedObject;
+
+          // Select all loops for the newly loaded object
+          APP_STATE.selectedLoops.clear();
+          for (let i = 1; i <= detectedRows; i++) {
+            APP_STATE.selectedLoops.add(i);
+          }
+          APP_STATE.userModifiedLoops = false;
 
           // Update HUD indicators
           document.getElementById('headerHeightProgress').textContent = `${detectedRows} / ${detectedRows}`;
@@ -3390,9 +3407,8 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           // Update individual detector readouts if visual elements present
           updateIndividualChannelsVisual(matrixFromDb[matrixFromDb.length - 1]);
 
-          // Rebuild sidebar loops: only force rebuild if row count changed or user manually switched
-          const shouldRebuild = (prevTotalHeights !== detectedRows) || showNotification;
-          buildSidebarLoopList(shouldRebuild);
+          // Rebuild sidebar loops and render heatmap immediately
+          buildSidebarLoopList(true);
           updateColorbarGradient();
           renderMatrixHeatmap();
           render3DSourceViewport();
@@ -3423,10 +3439,12 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
       }
     })
     .catch(err => {
-      console.warn("[History Fetch Error]", err);
-      if (btn) btn.classList.remove('spinning');
-      if (showNotification) {
-        showToast('warning', 'Gagal Sinkronisasi', 'Tidak dapat mengambil data dari database server.');
+      if (fetchId === activeTiDBFetchId) {
+        console.warn("[History Fetch Error]", err);
+        if (btn) btn.classList.remove('spinning');
+        if (showNotification) {
+          showToast('warning', 'Gagal Sinkronisasi', 'Tidak dapat mengambil data dari database server.');
+        }
       }
     });
 }
