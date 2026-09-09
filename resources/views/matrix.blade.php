@@ -102,25 +102,12 @@
 
       <div class="btn-group-divider"></div>
 
-      <button class="btn-action btn-start" id="btnStartScan" onclick="openStartScanModal()">
-        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span>START SCAN</span>
-      </button>
-      <button class="btn-action btn-pause" id="btnPauseScan" onclick="pauseScanning()" disabled>
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-        <span id="pauseBtnLabel">PAUSE</span>
-      </button>
-      <button class="btn-action btn-reset" id="btnStopScan" onclick="stopScanning()" disabled>
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-        <span>RESET</span>
-      </button>
-
-      <!-- TOMBOL SIMPAN HASIL (KUNING SAAT SCAN -> HIJAU SAAT BERES/STOP) -->
-      <button class="btn-action btn-save-session btn-save-idle" id="btnSaveSession" onclick="saveScanSession()" title="Simpan hasil pemindaian ke database dan unduh 3 gambar visualisasi ilmiah">
+      <!-- TOMBOL SIMPAN HASIL (DOWNLOAD 3 PLOT ILMIAH TIAP PILIH OBJEK) -->
+      <button class="btn-action btn-save-session btn-save-ready" id="btnSaveSession" onclick="saveScanSession()" title="Simpan dan unduh 3 gambar visualisasi ilmiah hasil scan dari TiDB Cloud">
         <svg id="saveBtnIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-          <polyline points="17 21 17 13 7 13 7 21"/>
-          <polyline points="7 3 7 8 15 8"/>
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+          <polyline points="7 10 12 15 17 10"></polyline>
+          <line x1="12" y1="15" x2="12" y2="3"></line>
         </svg>
         <span id="saveBtnLabel">SIMPAN HASIL</span>
       </button>
@@ -1847,17 +1834,20 @@ function removeToast(toastId) {
 }
 
 function saveScanSession() {
-  if (APP_STATE.matrixData.length === 0 && APP_STATE.sessionRecords.length === 0) {
-    showToast('warning', 'Data Kosong', 'Tidak ada data pemindaian untuk disimpan.');
+  if (!APP_STATE.matrixData || APP_STATE.matrixData.length === 0) {
+    showToast('warning', 'Data Kosong', 'Tidak ada data pemindaian di database untuk diunduh.');
     return;
   }
 
   const btn = document.getElementById('btnSaveSession');
   const label = document.getElementById('saveBtnLabel');
   if (btn) btn.disabled = true;
-  if (label) label.textContent = 'MENYIMPAN & MENGUNDUH...';
+  if (label) label.textContent = 'MENGUNDUH 3 GAMBAR...';
 
-  // 1. Hitung data mean detektor 72 channel
+  const objName = APP_STATE.objectName || 'Sample';
+  const objSlug = objName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  // 1. Hitung data rata-rata detektor berdasarkan data matriks TiDB Cloud
   const mean72 = getCalculatedDetectorAverages();
 
   // 2. Generate 3 Visualisasi Ilmiah Gambar 1, 2, dan 3
@@ -1865,58 +1855,18 @@ function saveScanSession() {
   const canvas2 = generateMeanResponseGrid8x9Canvas(mean72);
   const canvas3 = generateGlobalSpatialSensitivityCanvas(APP_STATE.matrixData, mean72);
 
-  // 3. Unduh 3 file secara berurutan
-  downloadCanvasAsPng(canvas1, 'spatial_response_distribution_72_cells.png');
+  // 3. Unduh 3 file gambar visualisasi ilmiah secara berurutan
+  downloadCanvasAsPng(canvas1, `plot_1_spatial_distribution_72_cells_${objSlug}.png`);
   setTimeout(() => {
-    downloadCanvasAsPng(canvas2, 'detector_array_mean_response_grid.png');
+    downloadCanvasAsPng(canvas2, `plot_2_mean_response_grid_8x9_${objSlug}.png`);
   }, 250);
   setTimeout(() => {
-    downloadCanvasAsPng(canvas3, 'global_spatial_sensitivity_map.png');
+    downloadCanvasAsPng(canvas3, `plot_3_global_spatial_sensitivity_map_${objSlug}.png`);
+    setSaveButtonState('ready');
   }, 500);
 
-  logTerminal(`<span class="log-badge-ok">[SIMPAN HASIL]</span> 3 file visualisasi ilmiah (Spatial 72 Cells, Mean Grid 8x9, Global Sensitivity Map) berhasil diunduh.`);
-
-  // 4. Jika sesi pemindaian baru aktif, simpan juga ke database (TiDB Cloud / SQLite)
-  if (APP_STATE.sessionRecords.length > 0) {
-    const payload = {
-      object_name: APP_STATE.objectName,
-      session_id: APP_STATE.sessionId,
-      total_loops: APP_STATE.totalLoops,
-      transition_delay: APP_STATE.transitionDelay,
-      records: APP_STATE.sessionRecords
-    };
-
-    fetch('/matrix-data/save-session', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-      },
-      body: JSON.stringify(payload)
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === 'success') {
-        setSaveButtonState('saved');
-        logTerminal(`<span class="log-badge-ok">[DB SAVE]</span> Sesi objek <strong>'${APP_STATE.objectName}'</strong> (${data.count} baris) tersimpan di <strong>${data.db_target === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</strong>!`);
-        showToast('success', 'Tersimpan & 3 Gambar Diunduh!', `Hasil scan <b>${APP_STATE.objectName}</b> berhasil disimpan ke database dan 3 file visualisasi ilmiah telah diunduh.`);
-        updateTimestampDisplay(new Date().toLocaleTimeString(), data.db_target === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
-        fetchInitialHistory();
-      } else {
-        setSaveButtonState('saved');
-        showToast('success', '3 Gambar Berhasil Diunduh!', `3 file visualisasi ilmiah hasil scan telah diunduh ke komputer.`);
-      }
-    })
-    .catch(err => {
-      console.error('[Save Session Error]', err);
-      setSaveButtonState('saved');
-      showToast('success', '3 Gambar Berhasil Diunduh!', '3 file visualisasi ilmiah hasil scan telah diunduh ke komputer.');
-    });
-  } else {
-    // Exporting currently loaded object
-    setSaveButtonState('saved');
-    showToast('success', '3 Gambar Berhasil Diunduh!', `3 file visualisasi ilmiah untuk objek <b>${APP_STATE.objectName}</b> telah diunduh.`);
-  }
+  logTerminal(`<span class="log-badge-ok">[SIMPAN HASIL]</span> 3 file visualisasi ilmiah (Plot 1, Plot 2, Plot 3) untuk objek <strong>${objName}</strong> berhasil diunduh.`);
+  showToast('success', '3 Gambar Berhasil Diunduh!', `3 file visualisasi ilmiah untuk objek <b>${objName}</b> telah diunduh.`);
 }
 
 // ==========================================
@@ -3509,6 +3459,7 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           render3DSourceViewport();
           renderTopViewXZ();
           updateRawTable();
+          setSaveButtonState('ready');
 
           if (showNotification) {
             showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${resolvedObject}</b> (${matrixFromDb.length} baris blok | ${detectedCols} Detektor) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
@@ -3549,7 +3500,7 @@ function fetchInitialHistory() {
 
   // Background Auto-sync from TiDB Cloud every 10 seconds for active object
   setInterval(() => {
-    if (!APP_STATE.isScanning && !APP_STATE.isPaused && APP_STATE.saveState !== 'ready' && APP_STATE.objectName) {
+    if (APP_STATE.objectName) {
       loadObjectDataFromTiDB(APP_STATE.objectName, false);
     }
   }, 10000);
