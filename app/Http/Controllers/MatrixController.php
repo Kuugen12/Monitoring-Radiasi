@@ -34,41 +34,6 @@ class MatrixController extends Controller
 
         // 1. Prioritas Utama: Ambil langsung dari TiDB Cloud (MySQL Connection)
         try {
-            $query = DB::table('scan_matrix');
-            if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
-                $query->where('session_id', $sessionFilter);
-            } elseif (!empty($objectFilter) && $objectFilter !== 'ALL') {
-                $latestSession = DB::table('scan_matrix')
-                    ->where('object_name', $objectFilter)
-                    ->whereNotNull('session_id')
-                    ->where('session_id', '<>', '')
-                    ->orderBy('id', 'desc')
-                    ->value('session_id');
-
-                if ($latestSession) {
-                    $query->where('object_name', $objectFilter)->where('session_id', $latestSession);
-                } else {
-                    $query->where('object_name', $objectFilter);
-                }
-            } else {
-                $latestSession = DB::table('scan_matrix')
-                    ->whereNotNull('session_id')
-                    ->where('session_id', '<>', '')
-                    ->orderBy('id', 'desc')
-                    ->value('session_id');
-
-                if ($latestSession) {
-                    $query->where('session_id', $latestSession);
-                }
-            }
-
-            $records = $query->orderBy('id', 'desc')->limit($limit)->get();
-            if ($records->isNotEmpty()) {
-                $rows = $records->map(function ($item) {
-                    return (array) $item;
-                })->toArray();
-            }
-
             // Ambil daftar seluruh objek yang pernah di-scan
             $availableObjects = DB::table('scan_matrix')
                 ->select(
@@ -108,6 +73,40 @@ class MatrixController extends Controller
                 ->get()
                 ->toArray();
 
+            // Jika objectFilter kosong atau 'ALL', ambil object paling baru dari daftar
+            if (empty($objectFilter) || $objectFilter === 'ALL') {
+                if (!empty($availableObjects)) {
+                    $objectFilter = $availableObjects[0]->object_name ?? 'Sample_new';
+                } else {
+                    $objectFilter = 'Sample_new';
+                }
+            }
+
+            $query = DB::table('scan_matrix');
+            if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
+                $query->where('session_id', $sessionFilter);
+            } else {
+                $latestSession = DB::table('scan_matrix')
+                    ->where('object_name', $objectFilter)
+                    ->whereNotNull('session_id')
+                    ->where('session_id', '<>', '')
+                    ->orderBy('id', 'desc')
+                    ->value('session_id');
+
+                if ($latestSession) {
+                    $query->where('object_name', $objectFilter)->where('session_id', $latestSession);
+                } else {
+                    $query->where('object_name', $objectFilter);
+                }
+            }
+
+            $records = $query->orderBy('id', 'desc')->limit(100)->get();
+            if ($records->isNotEmpty()) {
+                $rows = $records->map(function ($item) {
+                    return (array) $item;
+                })->toArray();
+            }
+
         } catch (\Exception $e) {
             // 2. Fallback: Baca dari SQLite lokal jika koneksi TiDB offline
             $dbPath = base_path('arraydata.db');
@@ -116,12 +115,24 @@ class MatrixController extends Controller
                     $sqlite = new \PDO("sqlite:" . $dbPath);
                     $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                     
+                    // Objects from SQLite
+                    $objStmt = $sqlite->query("SELECT object_name, COUNT(*) as total_records, MAX(timestamp) as last_ts, MAX(max_cps) as peak_cps, ROUND(AVG(avg_cps), 1) as mean_cps, MAX(height_level) as max_height, MAX(total_loops) as total_loops FROM scan_matrix WHERE object_name IS NOT NULL AND object_name != '' GROUP BY object_name ORDER BY MAX(id) DESC");
+                    $availableObjects = $objStmt->fetchAll(\PDO::FETCH_ASSOC);
+
+                    if (empty($objectFilter) || $objectFilter === 'ALL') {
+                        if (!empty($availableObjects)) {
+                            $objectFilter = $availableObjects[0]['object_name'] ?? 'Sample_new';
+                        } else {
+                            $objectFilter = 'Sample_new';
+                        }
+                    }
+
                     if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
                         $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE session_id = :sess ORDER BY id DESC LIMIT :lim");
                         $stmt->bindValue(':sess', $sessionFilter);
                         $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
                         $stmt->execute();
-                    } elseif (!empty($objectFilter) && $objectFilter !== 'ALL') {
+                    } else {
                         $latestSessStmt = $sqlite->prepare("SELECT session_id FROM scan_matrix WHERE object_name = :obj AND session_id IS NOT NULL AND session_id != '' ORDER BY id DESC LIMIT 1");
                         $latestSessStmt->bindValue(':obj', $objectFilter);
                         $latestSessStmt->execute();
@@ -138,16 +149,8 @@ class MatrixController extends Controller
                             $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
                         }
                         $stmt->execute();
-                    } else {
-                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix ORDER BY id DESC LIMIT :lim");
-                        $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
-                        $stmt->execute();
                     }
                     $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
-
-                    // Objects from SQLite
-                    $objStmt = $sqlite->query("SELECT object_name, COUNT(*) as total_records, MAX(timestamp) as last_ts, MAX(max_cps) as peak_cps, ROUND(AVG(avg_cps), 1) as mean_cps, MAX(height_level) as max_height, MAX(total_loops) as total_loops FROM scan_matrix WHERE object_name IS NOT NULL AND object_name != '' GROUP BY object_name ORDER BY MAX(id) DESC");
-                    $availableObjects = $objStmt->fetchAll(\PDO::FETCH_ASSOC);
 
                     $source = 'sqlite_local';
                 } catch (\Exception $ex) {}

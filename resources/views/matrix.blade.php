@@ -90,7 +90,6 @@
           <span>OBJEK:</span>
         </div>
         <select id="selectActiveObject" class="deck-object-select" onchange="onObjectSelectChange(this.value)" title="Pilih objek target untuk melihat hasil scan di TiDB Cloud">
-          <option value="ALL">📦 Semua Objek (Terbaru)</option>
         </select>
         <button type="button" class="btn-refresh-objects" id="btnRefreshObjects" onclick="refreshAvailableObjects(true)" title="Sinkronkan daftar objek dari TiDB Cloud">
           <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -201,13 +200,13 @@
         <div class="panel-head">
           <h3>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-            SCAN LOOPS
+            BLOK SCAN
           </h3>
-          <span class="panel-badge" id="sidebarLoopCountText">24 Loops</span>
+          <span class="panel-badge" id="sidebarLoopCountText">10 Blok</span>
         </div>
 
         <div class="loop-scroll-list" id="loopListContainer">
-          <!-- Dynamic clean loop items (L01, L02... L24) -->
+          <!-- Dynamic clean loop items (Blok 01, Blok 02... Blok 10) -->
         </div>
 
         <div class="loop-btn-bar">
@@ -258,9 +257,9 @@
       <div class="heatmap-stage-card" id="heatmapMainCard">
         <!-- Module Zone Markers -->
         <div class="module-marker-strip">
-          <div class="mod-marker xs1">XS1: 01 &ndash; 24 (0 &ndash; 266 cm)</div>
-          <div class="mod-marker xs2">XS2: 25 &ndash; 48 (267 &ndash; 533 cm)</div>
-          <div class="mod-marker xs3">XS3: 49 &ndash; 72 (534 &ndash; 800 cm)</div>
+          <div class="mod-marker xs1">XS1 (S1): D01 &ndash; D12</div>
+          <div class="mod-marker xs2">XS2 (S2): D13 &ndash; D24</div>
+          <div class="mod-marker xs3">XS3 (S3): D25 &ndash; D36</div>
         </div>
 
         <!-- Heatmap Canvas Stage -->
@@ -926,7 +925,7 @@ function renderMatrixHeatmap() {
       ctx.fillStyle = isCompleted ? '#94A3B8' : '#334155';
     }
     ctx.font = '600 9px "IBM Plex Mono"';
-    ctx.fillText(`L${blokNum < 10 ? '0' + blokNum : blokNum}`, 6, r * cellH + cellH / 2 + 3);
+    ctx.fillText(`Blok ${blokNum < 10 ? '0' + blokNum : blokNum}`, 6, r * cellH + cellH / 2 + 3);
   }
 
   // Vertical Module Boundaries (Divided dynamically by 3 modules)
@@ -2134,7 +2133,7 @@ function buildSidebarLoopList(forceRebuild = false) {
       }
     }
     const countBadge = document.getElementById('sidebarLoopCountText');
-    if (countBadge) countBadge.textContent = `${count} Loops`;
+    if (countBadge) countBadge.textContent = `${count} Blok`;
     return;
   }
 
@@ -2163,14 +2162,14 @@ function buildSidebarLoopList(forceRebuild = false) {
     item.innerHTML = `
       <div class="loop-left">
         <input type="checkbox" id="loopCheck-${i}" class="loop-checkbox" ${isChecked ? 'checked' : ''} onchange="toggleLoopSelection(${i}, this.checked)" onclick="event.stopPropagation()">
-        <span class="loop-name">Loop ${i < 10 ? '0' + i : i}</span>
+        <span class="loop-name">Blok ${i < 10 ? '0' + i : i}</span>
       </div>
       <span class="loop-height-tag">${i * 35} cm</span>
     `;
     container.appendChild(item);
   }
   const countBadge = document.getElementById('sidebarLoopCountText');
-  if (countBadge) countBadge.textContent = `${count} Loops`;
+  if (countBadge) countBadge.textContent = `${count} Blok`;
 }
 
 function handleLoopRowClick(event, loopNum) {
@@ -3157,19 +3156,18 @@ function populateObjectDropdown(availableObjects, currentSelected) {
   const prevVal = selectEl.value;
   selectEl.innerHTML = '';
 
-  // Default Option: Semua Objek (Terbaru)
-  const allOpt = document.createElement('option');
-  allOpt.value = 'ALL';
-  allOpt.textContent = '📦 Semua Objek (Terbaru)';
-  selectEl.appendChild(allOpt);
-
   let matchFound = false;
 
   if (Array.isArray(availableObjects) && availableObjects.length > 0) {
     if (datalist) datalist.innerHTML = '';
     if (presetContainer) presetContainer.innerHTML = '';
 
-    availableObjects.forEach(obj => {
+    // If currentSelected is empty or ALL, default to the first available object
+    if (!currentSelected || currentSelected === 'ALL') {
+      currentSelected = availableObjects[0].object_name;
+    }
+
+    availableObjects.forEach((obj, idx) => {
       const opt = document.createElement('option');
       opt.value = obj.object_name;
       const count = obj.total_records || 0;
@@ -3179,6 +3177,10 @@ function populateObjectDropdown(availableObjects, currentSelected) {
       if (currentSelected && (currentSelected === obj.object_name || currentSelected === obj.object_name.trim())) {
         opt.selected = true;
         matchFound = true;
+      } else if (!currentSelected && idx === 0) {
+        opt.selected = true;
+        matchFound = true;
+        currentSelected = obj.object_name;
       }
       selectEl.appendChild(opt);
 
@@ -3201,15 +3203,13 @@ function populateObjectDropdown(availableObjects, currentSelected) {
     });
   }
 
-  if (currentSelected === 'ALL') {
-    allOpt.selected = true;
-  } else if (!matchFound && currentSelected && currentSelected !== 'ALL') {
+  if (!matchFound && currentSelected && currentSelected !== 'ALL') {
     const customOpt = document.createElement('option');
     customOpt.value = currentSelected;
     customOpt.textContent = `${currentSelected} (Aktif)`;
     customOpt.selected = true;
     selectEl.appendChild(customOpt);
-  } else if (!matchFound && prevVal) {
+  } else if (!matchFound && prevVal && prevVal !== 'ALL') {
     selectEl.value = prevVal;
   }
 }
@@ -3221,7 +3221,7 @@ function onObjectSelectChange(selectedName) {
   }
   APP_STATE.userModifiedLoops = false;
   APP_STATE.selectedLoops.clear();
-  APP_STATE.objectName = (selectedName === 'ALL') ? 'Gentong' : selectedName;
+  APP_STATE.objectName = selectedName;
   loadObjectDataFromTiDB(selectedName, true);
 }
 
@@ -3230,20 +3230,18 @@ function refreshAvailableObjects(isManual = false) {
   if (btn) btn.classList.add('spinning');
   
   const selectEl = document.getElementById('selectActiveObject');
-  const currentObj = selectEl ? selectEl.value : 'ALL';
+  const currentObj = selectEl ? selectEl.value : '';
 
   loadObjectDataFromTiDB(currentObj, isManual);
 }
 
-function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
+function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
   const btn = document.getElementById('btnRefreshObjects');
   if (btn) btn.classList.add('spinning');
 
   let url = '/matrix-data/history';
   if (objectName && objectName !== 'ALL') {
     url += '?object_name=' + encodeURIComponent(objectName);
-  } else {
-    url += '?limit=24';
   }
 
   fetch(url)
@@ -3254,9 +3252,11 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
     .then(data => {
       if (btn) btn.classList.remove('spinning');
 
+      const resolvedObject = data.current_object || (data.available_objects && data.available_objects[0] ? data.available_objects[0].object_name : 'Sample_new');
+
       // 1. Update dropdown and modal inputs from TiDB Cloud
       if (data.available_objects) {
-        populateObjectDropdown(data.available_objects, objectName);
+        populateObjectDropdown(data.available_objects, resolvedObject);
       }
 
       // 2. Process records
@@ -3265,7 +3265,7 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
         const timeStr = latest.timestamp || latest.created_at || 'Baru Saja';
         updateTimestampDisplay(timeStr, data.source === 'tidb_cloud' ? 'TiDB CLOUD' : 'LOCAL DB');
 
-        // Sort ascending by height_level or ID so earlier scans are Loop 1 and latest is Loop N
+        // Sort ascending by height_level or ID so earlier scans are Blok 1 and latest is Blok N
         const sorted = [...data.records].sort((a, b) => {
           const hA = parseInt(a.height_level) || 0;
           const hB = parseInt(b.height_level) || 0;
@@ -3309,14 +3309,9 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
           APP_STATE.totalHeights = detectedRows;
           APP_STATE.currentHeight = detectedRows;
           APP_STATE.totalLoops = latest.total_loops || 1;
-          APP_STATE.objectMaxCps = globalPeakCps || 44;
+          APP_STATE.objectMaxCps = globalPeakCps || 17;
           APP_STATE.totalChannels = detectedCols;
-
-          if (objectName !== 'ALL') {
-            APP_STATE.objectName = objectName;
-          } else if (latest.object_name) {
-            APP_STATE.objectName = latest.object_name;
-          }
+          APP_STATE.objectName = resolvedObject;
 
           // Update HUD indicators
           document.getElementById('headerHeightProgress').textContent = `${detectedRows} / ${detectedRows}`;
@@ -3380,15 +3375,14 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
           updateRawTable();
 
           if (showNotification) {
-            const displayTitle = objectName === 'ALL' ? 'Semua Objek (Terbaru)' : objectName;
-            showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${displayTitle}</b> (${matrixFromDb.length} baris loop | ${detectedCols} Detektor) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
-            logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${displayTitle}</strong> (${matrixFromDb.length} baris level | ${detectedCols} Detektor | Peak: ${globalPeakCps} CPS)`);
+            showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${resolvedObject}</b> (${matrixFromDb.length} baris blok | ${detectedCols} Detektor) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
+            logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${resolvedObject}</strong> (${matrixFromDb.length} baris level | ${detectedCols} Detektor | Peak: ${globalPeakCps} CPS)`);
           }
         }
       } else {
         updateTimestampDisplay('Belum ada data', 'READY');
         if (showNotification) {
-          showToast('info', 'Data Kosong', `Belum ada data rekaman pemindaian untuk objek <b>${objectName}</b> di database.`);
+          showToast('info', 'Data Kosong', `Belum ada data rekaman pemindaian untuk objek <b>${resolvedObject}</b> di database.`);
         }
       }
     })
@@ -3402,13 +3396,13 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
 }
 
 function fetchInitialHistory() {
-  loadObjectDataFromTiDB('ALL', false);
+  loadObjectDataFromTiDB('', false);
 
   // Background Auto-sync from TiDB Cloud every 8 seconds
   setInterval(() => {
     if (!APP_STATE.isScanning && !APP_STATE.isPaused) {
       const selectEl = document.getElementById('selectActiveObject');
-      const activeObj = selectEl ? selectEl.value : 'ALL';
+      const activeObj = selectEl ? selectEl.value : '';
       loadObjectDataFromTiDB(activeObj, false);
     }
   }, 8000);
