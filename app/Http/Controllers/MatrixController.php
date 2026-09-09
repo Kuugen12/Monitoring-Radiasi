@@ -38,7 +38,28 @@ class MatrixController extends Controller
             if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
                 $query->where('session_id', $sessionFilter);
             } elseif (!empty($objectFilter) && $objectFilter !== 'ALL') {
-                $query->where('object_name', $objectFilter);
+                $latestSession = DB::table('scan_matrix')
+                    ->where('object_name', $objectFilter)
+                    ->whereNotNull('session_id')
+                    ->where('session_id', '<>', '')
+                    ->orderBy('id', 'desc')
+                    ->value('session_id');
+
+                if ($latestSession) {
+                    $query->where('object_name', $objectFilter)->where('session_id', $latestSession);
+                } else {
+                    $query->where('object_name', $objectFilter);
+                }
+            } else {
+                $latestSession = DB::table('scan_matrix')
+                    ->whereNotNull('session_id')
+                    ->where('session_id', '<>', '')
+                    ->orderBy('id', 'desc')
+                    ->value('session_id');
+
+                if ($latestSession) {
+                    $query->where('session_id', $latestSession);
+                }
             }
 
             $records = $query->orderBy('id', 'desc')->limit($limit)->get();
@@ -101,9 +122,21 @@ class MatrixController extends Controller
                         $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
                         $stmt->execute();
                     } elseif (!empty($objectFilter) && $objectFilter !== 'ALL') {
-                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj ORDER BY id DESC LIMIT :lim");
-                        $stmt->bindValue(':obj', $objectFilter);
-                        $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
+                        $latestSessStmt = $sqlite->prepare("SELECT session_id FROM scan_matrix WHERE object_name = :obj AND session_id IS NOT NULL AND session_id != '' ORDER BY id DESC LIMIT 1");
+                        $latestSessStmt->bindValue(':obj', $objectFilter);
+                        $latestSessStmt->execute();
+                        $latestSess = $latestSessStmt->fetchColumn();
+
+                        if ($latestSess) {
+                            $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj AND session_id = :sess ORDER BY id DESC LIMIT :lim");
+                            $stmt->bindValue(':obj', $objectFilter);
+                            $stmt->bindValue(':sess', $latestSess);
+                            $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
+                        } else {
+                            $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj ORDER BY id DESC LIMIT :lim");
+                            $stmt->bindValue(':obj', $objectFilter);
+                            $stmt->bindValue(':lim', $limit, \PDO::PARAM_INT);
+                        }
                         $stmt->execute();
                     } else {
                         $stmt = $sqlite->prepare("SELECT * FROM scan_matrix ORDER BY id DESC LIMIT :lim");
@@ -146,6 +179,12 @@ class MatrixController extends Controller
             }
             if (!empty($row['xs3_data']) && is_string($row['xs3_data'])) {
                 $row['xs3_data'] = json_decode($row['xs3_data'], true);
+            }
+            if (empty($row['detector_data'])) {
+                $d1 = is_array($row['xs1_data']) ? $row['xs1_data'] : [];
+                $d2 = is_array($row['xs2_data']) ? $row['xs2_data'] : [];
+                $d3 = is_array($row['xs3_data']) ? $row['xs3_data'] : [];
+                $row['detector_data'] = array_merge($d1, $d2, $d3);
             }
             if (!isset($row['object_name']) || empty($row['object_name'])) {
                 $row['object_name'] = 'Gentong';

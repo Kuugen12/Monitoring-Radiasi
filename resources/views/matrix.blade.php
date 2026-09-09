@@ -244,10 +244,11 @@
         <div class="palette-picker">
           <span>Palette:</span>
           <select id="paletteSelect" onchange="changeColorPalette(this.value)">
-            <option value="turbo" selected>Turbo (Scientific)</option>
+            <option value="plasma" selected>Plasma (Raspi GUI / Matplotlib)</option>
+            <option value="turbo">Turbo (Scientific)</option>
             <option value="jet">Jet / Rainbow</option>
             <option value="viridis">Viridis</option>
-            <option value="magma">Magma</option>
+            <option value="magma">Magma / Inferno</option>
             <option value="thermal">Thermal IR</option>
           </select>
         </div>
@@ -611,14 +612,16 @@ const APP_STATE = {
   scanIntervalId: null,
   elapsedSeconds: 0,
   useFirebase: true,
-  currentPalette: 'turbo',
+  currentPalette: 'plasma',
   viewMode: 'matrix', // 'matrix', 'contour', 'grid', 'table'
-  matrixData: [], // Array of rows: each row is 72 values
+  matrixData: [], // Array of rows: each row is detector readings
+  totalChannels: 36,
   xs1History: [],
   xs2History: [],
   xs3History: [],
   timestamps: [],
-  selectedLoops: new Set(Array.from({length: 24}, (_, i) => i + 1)),
+  selectedLoops: new Set(),
+  userModifiedLoops: false,
   estimatedSource: { x: 412.5, y: -32.7, z: 186.4, confidence: 96.2 }
 };
 
@@ -646,11 +649,30 @@ try {
   console.warn("[Firebase] Init error (running in local simulation mode):", err);
 }
 
-// 3. COLOR PALETTE DEFINITIONS & INTERPOLATORS
-function getColorForValue(val, maxVal = 350, palette = APP_STATE.currentPalette) {
-  const t = Math.max(0, Math.min(1, val / maxVal));
+// 3. COLOR PALETTE DEFINITIONS & INTERPOLATORS (WITH DYNAMIC SCALING)
+function getColorForValue(val, maxVal = null, palette = APP_STATE.currentPalette) {
+  if (val === undefined || val === null || isNaN(val)) {
+    return isLightMode() ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.04)';
+  }
+  const effectiveMax = (maxVal && maxVal > 0) ? maxVal : Math.max(1, APP_STATE.objectMaxCps || 17);
+  const t = Math.max(0, Math.min(1, Number(val) / effectiveMax));
   
-  if (palette === 'turbo') {
+  if (palette === 'plasma') {
+    // Matplotlib Plasma Colormap (Deep Blue -> Violet -> Magenta -> Orange -> Bright Yellow)
+    if (t < 0.25) {
+      const f = t / 0.25;
+      return `rgb(${Math.round(13 + f * 113)}, ${Math.round(8 - f * 5)}, ${Math.round(135 + f * 33)})`;
+    } else if (t < 0.5) {
+      const f = (t - 0.25) / 0.25;
+      return `rgb(${Math.round(126 + f * 78)}, ${Math.round(3 + f * 68)}, ${Math.round(168 - f * 48)})`;
+    } else if (t < 0.75) {
+      const f = (t - 0.5) / 0.25;
+      return `rgb(${Math.round(204 + f * 44)}, ${Math.round(71 + f * 78)}, ${Math.round(120 - f * 56)})`;
+    } else {
+      const f = (t - 0.75) / 0.25;
+      return `rgb(${Math.round(248 - f * 8)}, ${Math.round(149 + f * 100)}, ${Math.round(64 - f * 31)})`;
+    }
+  } else if (palette === 'turbo') {
     if (t < 0.25) {
       const f = t / 0.25;
       return `rgb(${Math.round(30 + 10*f)}, ${Math.round(40 + 140*f)}, ${Math.round(180 + 75*f)})`;
@@ -694,16 +716,38 @@ function getColorForValue(val, maxVal = 350, palette = APP_STATE.currentPalette)
   }
 }
 
+function updateModuleMarkers(numCols = 72) {
+  const markerStrip = document.querySelector('.module-marker-strip');
+  if (!markerStrip) return;
+  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
+  const m1End = Math.min(chPerMod, numCols);
+  const m2Start = m1End + 1;
+  const m2End = Math.min(chPerMod * 2, numCols);
+  const m3Start = m2End + 1;
+  const m3End = numCols;
+
+  markerStrip.innerHTML = `
+    <div class="mod-marker xs1">XS1 (S1): D01 &ndash; D${m1End < 10 ? '0' + m1End : m1End}</div>
+    <div class="mod-marker xs2">XS2 (S2): D${m2Start < 10 ? '0' + m2Start : m2Start} &ndash; D${m2End < 10 ? '0' + m2End : m2End}</div>
+    <div class="mod-marker xs3">XS3 (S3): D${m3Start < 10 ? '0' + m3Start : m3Start} &ndash; D${m3End < 10 ? '0' + m3End : m3End}</div>
+  `;
+}
+
 function updateColorbarGradient() {
   const gradientEl = document.getElementById('colorbarGradient');
+  const maxLabelEl = document.getElementById('colorbarMaxLabel');
   if (!gradientEl) return;
+  const maxVal = Math.max(1, APP_STATE.objectMaxCps || 17);
   const stops = [];
   for (let i = 0; i <= 10; i++) {
     const pct = i * 10;
-    const col = getColorForValue(pct * 3.5, 350, APP_STATE.currentPalette);
+    const col = getColorForValue((pct / 100) * maxVal, maxVal, APP_STATE.currentPalette);
     stops.push(`${col} ${pct}%`);
   }
   gradientEl.style.background = `linear-gradient(to right, ${stops.join(', ')})`;
+  if (maxLabelEl) {
+    maxLabelEl.textContent = `${maxVal} CPS (Max)`;
+  }
 }
 
 // Helper to detect current light mode
@@ -802,8 +846,10 @@ function renderMatrixHeatmap() {
   const isLight = isLightMode();
   ctx.clearRect(0, 0, width, height);
 
-  const numCols = 72;
-  const numRows = APP_STATE.totalHeights;
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
+    ? APP_STATE.matrixData[0].length
+    : (APP_STATE.totalChannels || 36);
+  const numRows = Math.max(1, APP_STATE.totalHeights || 10);
   const cellW = width / numCols;
   const cellH = height / numRows;
 
@@ -818,27 +864,44 @@ function renderMatrixHeatmap() {
     return;
   }
 
-  // Draw Heatmap Cells
+  // Determine dynamic max CPS for accurate high-contrast color normalization (matching Raspi GUI)
+  let dynamicMax = 0;
+  if (APP_STATE.matrixData.length > 0) {
+    for (let r = 0; r < APP_STATE.matrixData.length; r++) {
+      for (let c = 0; c < numCols; c++) {
+        const v = Number(APP_STATE.matrixData[r][c]) || 0;
+        if (v > dynamicMax) dynamicMax = v;
+      }
+    }
+  }
+  if (dynamicMax <= 0) dynamicMax = Math.max(10, APP_STATE.objectMaxCps || 17);
+
+  // Draw Heatmap Cells:
+  // Matching Raspberry Pi 5 GUI "Blok (terbaru di atas)":
+  // Top row (r = 0) corresponds to latest blok (last index in matrixData),
+  // Bottom row (r = numRows - 1) corresponds to earliest blok (index 0).
   for (let r = 0; r < numRows; r++) {
-    const isCompleted = r < APP_STATE.matrixData.length;
-    const rowData = isCompleted ? APP_STATE.matrixData[r] : null;
-    const isLoopSelected = APP_STATE.selectedLoops.has(r + 1);
+    const actualRowIndex = (numRows - 1) - r;
+    const isCompleted = actualRowIndex >= 0 && actualRowIndex < APP_STATE.matrixData.length;
+    const rowData = isCompleted ? APP_STATE.matrixData[actualRowIndex] : null;
+    const blokNum = actualRowIndex + 1;
+    const isLoopSelected = APP_STATE.selectedLoops.has(blokNum);
 
     for (let c = 0; c < numCols; c++) {
       const x = c * cellW;
       const y = r * cellH;
 
-      if (isCompleted && isLoopSelected && rowData) {
-        const cps = rowData[c];
-        ctx.fillStyle = getColorForValue(cps, 350);
+      if (isCompleted && isLoopSelected && rowData && rowData[c] !== undefined) {
+        const cps = Number(rowData[c]) || 0;
+        ctx.fillStyle = getColorForValue(cps, dynamicMax);
         ctx.fillRect(x, y, cellW, cellH);
 
-        if (cps >= APP_STATE.hotspotThreshold) {
+        if (cps >= APP_STATE.hotspotThreshold && APP_STATE.hotspotThreshold < dynamicMax) {
           ctx.strokeStyle = isLight ? '#E11D48' : '#F43F5E';
           ctx.lineWidth = 1.5;
           ctx.strokeRect(x + 0.5, y + 0.5, cellW - 1, cellH - 1);
         } else {
-          ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(0, 0, 0, 0.25)';
+          ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.15)' : 'rgba(0, 0, 0, 0.35)';
           ctx.lineWidth = 0.5;
           ctx.strokeRect(x, y, cellW, cellH);
         }
@@ -863,26 +926,29 @@ function renderMatrixHeatmap() {
       ctx.fillStyle = isCompleted ? '#94A3B8' : '#334155';
     }
     ctx.font = '600 9px "IBM Plex Mono"';
-    ctx.fillText(`L${r + 1 < 10 ? '0' + (r + 1) : r + 1}`, 6, r * cellH + cellH / 2 + 3);
+    ctx.fillText(`L${blokNum < 10 ? '0' + blokNum : blokNum}`, 6, r * cellH + cellH / 2 + 3);
   }
 
-  // Vertical Module Boundaries
-  ctx.setLineDash([4, 4]);
-  ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.25)';
-  ctx.lineWidth = 1.5;
-  
-  const xDivider1 = 24 * cellW;
-  ctx.beginPath();
-  ctx.moveTo(xDivider1, 0);
-  ctx.lineTo(xDivider1, height);
-  ctx.stroke();
+  // Vertical Module Boundaries (Divided dynamically by 3 modules)
+  if (numCols >= 3) {
+    const chPerMod = Math.ceil(numCols / 3);
+    const xDivider1 = chPerMod * cellW;
+    const xDivider2 = (chPerMod * 2) * cellW;
 
-  const xDivider2 = 48 * cellW;
-  ctx.beginPath();
-  ctx.moveTo(xDivider2, 0);
-  ctx.lineTo(xDivider2, height);
-  ctx.stroke();
-  ctx.setLineDash([]);
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1.5;
+    
+    ctx.beginPath();
+    ctx.moveTo(xDivider1, 0);
+    ctx.lineTo(xDivider1, height);
+    if (chPerMod * 2 < numCols) {
+      ctx.moveTo(xDivider2, 0);
+      ctx.lineTo(xDivider2, height);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
   // Hover Crosshairs
   if (hoveredCell && hoveredCell.row < numRows && hoveredCell.col < numCols) {
@@ -920,14 +986,24 @@ function renderContourView(width, height) {
     return;
   }
 
+  let dynamicMax = 0;
+  for (let r = 0; r < APP_STATE.matrixData.length; r++) {
+    for (let c = 0; c < APP_STATE.matrixData[r].length; c++) {
+      const v = Number(APP_STATE.matrixData[r][c]) || 0;
+      if (v > dynamicMax) dynamicMax = v;
+    }
+  }
+  if (dynamicMax <= 0) dynamicMax = Math.max(10, APP_STATE.objectMaxCps || 17);
+
   const imgData = ctx.createImageData(width, height);
   const data = imgData.data;
   const numRows = APP_STATE.matrixData.length;
-  const numCols = 72;
+  const numCols = (APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0) ? APP_STATE.matrixData[0].length : 36;
 
   for (let py = 0; py < height; py += 2) {
     const normY = py / height;
-    const rowFloat = normY * (numRows - 1);
+    // Map normY = 0 (top) to latest row (numRows - 1) and normY = 1 (bottom) to row 0
+    const rowFloat = (1 - normY) * (numRows - 1);
     const r0 = Math.floor(rowFloat);
     const r1 = Math.min(numRows - 1, r0 + 1);
     const ryRatio = rowFloat - r0;
@@ -939,20 +1015,20 @@ function renderContourView(width, height) {
       const c1 = Math.min(numCols - 1, c0 + 1);
       const rxRatio = colFloat - c0;
 
-      const v00 = APP_STATE.matrixData[r0][c0] || 25;
-      const v10 = APP_STATE.matrixData[r0][c1] || 25;
-      const v01 = APP_STATE.matrixData[r1][c0] || 25;
-      const v11 = APP_STATE.matrixData[r1][c1] || 25;
+      const v00 = Number(APP_STATE.matrixData[r0][c0]) || 0;
+      const v10 = Number(APP_STATE.matrixData[r0][c1]) || 0;
+      const v01 = Number(APP_STATE.matrixData[r1][c0]) || 0;
+      const v11 = Number(APP_STATE.matrixData[r1][c1]) || 0;
 
       const topVal = v00 * (1 - rxRatio) + v10 * rxRatio;
       const botVal = v01 * (1 - rxRatio) + v11 * rxRatio;
       const val = topVal * (1 - ryRatio) + botVal * ryRatio;
 
-      const rgbStr = getColorForValue(val, 350);
+      const rgbStr = getColorForValue(val, dynamicMax);
       const match = rgbStr.match(/\d+/g);
-      const r = parseInt(match[0]);
-      const g = parseInt(match[1]);
-      const b = parseInt(match[2]);
+      const r = match ? parseInt(match[0]) : 0;
+      const g = match ? parseInt(match[1]) : 0;
+      const b = match ? parseInt(match[2]) : 0;
 
       for (let dy = 0; dy < 2 && (py + dy) < height; dy++) {
         for (let dx = 0; dx < 2 && (px + dx) < width; dx++) {
@@ -981,25 +1057,37 @@ function renderContourView(width, height) {
   ctx.stroke();
 }
 
-// 7. 8x9 CELL MATRIX VIEW
+// 7. CELL MATRIX VIEW (GRID VIEW)
 function render8x9GridView(width, height) {
-  const rows = 8;
-  const cols = 9;
-  const cellW = width / cols;
-  const cellH = height / rows;
   const isLight = isLightMode();
-
   ctx.fillStyle = isLight ? '#f8fafc' : '#040711';
   ctx.fillRect(0, 0, width, height);
 
-  const detectorAverages = new Array(72).fill(0);
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0]) ? APP_STATE.matrixData[0].length : 72;
+  let rows = 8;
+  let cols = 9;
+  if (numCols === 15) {
+    rows = 3;
+    cols = 5;
+  } else if (numCols === 24) {
+    rows = 4;
+    cols = 6;
+  } else if (numCols !== 72) {
+    cols = Math.ceil(Math.sqrt(numCols));
+    rows = Math.ceil(numCols / cols);
+  }
+
+  const cellW = width / cols;
+  const cellH = height / rows;
+
+  const detectorAverages = new Array(numCols).fill(0);
   if (APP_STATE.matrixData.length > 0) {
     for (let r = 0; r < APP_STATE.matrixData.length; r++) {
-      for (let c = 0; c < 72; c++) {
-        detectorAverages[c] += APP_STATE.matrixData[r][c];
+      for (let c = 0; c < numCols; c++) {
+        detectorAverages[c] += (APP_STATE.matrixData[r][c] || 0);
       }
     }
-    for (let c = 0; c < 72; c++) {
+    for (let c = 0; c < numCols; c++) {
       detectorAverages[c] = Math.round(detectorAverages[c] / APP_STATE.matrixData.length);
     }
   }
@@ -1007,6 +1095,7 @@ function render8x9GridView(width, height) {
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const detIndex = r * cols + c;
+      if (detIndex >= numCols) continue;
       const x = c * cellW;
       const y = r * cellH;
       const avgVal = detectorAverages[detIndex] || 0;
@@ -1196,6 +1285,11 @@ function renderTopViewXZ() {
 canvas.addEventListener('mousemove', (e) => {
   if (APP_STATE.viewMode !== 'matrix') return;
 
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
+    ? APP_STATE.matrixData[0].length
+    : (APP_STATE.totalChannels || 72);
+  const numRows = Math.max(1, APP_STATE.totalHeights || 10);
+
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
@@ -1203,29 +1297,34 @@ canvas.addEventListener('mousemove', (e) => {
   const mouseX = (e.clientX - rect.left) * scaleX;
   const mouseY = (e.clientY - rect.top) * scaleY;
 
-  const col = Math.floor(mouseX / (canvas.width / 72));
-  const row = Math.floor(mouseY / (canvas.height / APP_STATE.totalHeights));
+  const col = Math.floor(mouseX / (canvas.width / numCols));
+  const row = Math.floor(mouseY / (canvas.height / numRows));
 
-  if (col >= 0 && col < 72 && row >= 0 && row < APP_STATE.totalHeights) {
+  if (col >= 0 && col < numCols && row >= 0 && row < numRows) {
     hoveredCell = { row, col };
     renderMatrixHeatmap();
 
     const tooltip = document.getElementById('matrixTooltip');
     const detNumber = col + 1;
-    let modName = "XS1 (0x01)";
-    if (col >= 24 && col < 48) modName = "XS2 (0x02)";
-    if (col >= 48) modName = "XS3 (0x03)";
+    const chPerMod = Math.max(1, Math.ceil(numCols / 3));
+    let modName = "XS1 (S1)";
+    if (col >= chPerMod && col < chPerMod * 2) modName = "XS2 (S2)";
+    if (col >= chPerMod * 2) modName = "XS3 (S3)";
 
-    const isAvailable = row < APP_STATE.matrixData.length;
-    const cpsVal = isAvailable ? APP_STATE.matrixData[row][col] : '--';
-    const doseRate = isAvailable ? (cpsVal * 0.012).toFixed(2) : '--';
-    const isHotspot = isAvailable && cpsVal >= APP_STATE.hotspotThreshold;
+    const actualRowIndex = (numRows - 1) - row;
+    const blokNum = actualRowIndex + 1;
+    const isAvailable = actualRowIndex >= 0 && actualRowIndex < APP_STATE.matrixData.length;
+    const cpsVal = (isAvailable && APP_STATE.matrixData[actualRowIndex] && APP_STATE.matrixData[actualRowIndex][col] !== undefined)
+      ? APP_STATE.matrixData[actualRowIndex][col]
+      : '--';
+    const doseRate = (cpsVal !== '--' && !isNaN(cpsVal)) ? (cpsVal * 0.012).toFixed(2) : '--';
+    const isHotspot = (cpsVal !== '--' && !isNaN(cpsVal)) && (cpsVal >= APP_STATE.hotspotThreshold);
 
-    document.getElementById('ttDetectorName').textContent = `Detector D${detNumber}`;
+    document.getElementById('ttDetectorName').textContent = `Detector D${detNumber < 10 ? '0' + detNumber : detNumber}`;
     document.getElementById('ttModuleTag').textContent = modName;
-    document.getElementById('ttHeightLevel').textContent = `Loop ${row + 1} (${(row + 1) * 35} cm)`;
-    document.getElementById('ttCoordinates').textContent = `${Math.round((col / 72) * 800)}cm, ${(row + 1) * 35}cm`;
-    document.getElementById('ttCpsValue').textContent = isAvailable ? `${cpsVal} CPS` : 'No Data';
+    document.getElementById('ttHeightLevel').textContent = `Loop ${blokNum < 10 ? '0' + blokNum : blokNum} (${blokNum * 35} cm)`;
+    document.getElementById('ttCoordinates').textContent = `D${detNumber < 10 ? '0' + detNumber : detNumber}, Loop ${blokNum < 10 ? '0' + blokNum : blokNum}`;
+    document.getElementById('ttCpsValue').textContent = (cpsVal !== '--') ? `${cpsVal} CPS` : 'No Data';
     document.getElementById('ttDoseRate').textContent = isAvailable ? `${doseRate} µSv/h` : '--';
     
     const ttStatus = document.getElementById('ttStatus');
@@ -1250,17 +1349,19 @@ canvas.addEventListener('mouseleave', () => {
   renderMatrixHeatmap();
 });
 
-// 11. INDIVIDUAL 72-CHANNEL READOUTS & MICRO STRIP
+// 11. INDIVIDUAL CHANNEL READOUTS & MICRO STRIP
 function buildIndividualChannelsGrid() {
   const container = document.getElementById('individualChannelsContainer');
   if (!container) return;
   container.innerHTML = '';
+  const totalCh = APP_STATE.totalChannels || 72;
+  const chPerMod = Math.max(1, Math.ceil(totalCh / 3));
 
-  for (let i = 1; i <= 72; i++) {
+  for (let i = 1; i <= totalCh; i++) {
     const chip = document.createElement('div');
     let modClass = 'xs1';
-    if (i > 24 && i <= 48) modClass = 'xs2';
-    if (i > 48) modClass = 'xs3';
+    if (i > chPerMod && i <= chPerMod * 2) modClass = 'xs2';
+    if (i > chPerMod * 2) modClass = 'xs3';
 
     chip.className = `channel-readout-chip ${modClass}`;
     chip.id = `channelChip-${i}`;
@@ -1276,23 +1377,28 @@ function buildDetectorDotsGrid() {
   const grid = document.getElementById('detectorDotsGrid');
   if (!grid) return;
   grid.innerHTML = '';
+  const totalCh = APP_STATE.totalChannels || 72;
+  const chPerMod = Math.max(1, Math.ceil(totalCh / 3));
 
-  for (let i = 1; i <= 72; i++) {
+  for (let i = 1; i <= totalCh; i++) {
     const dot = document.createElement('div');
     dot.className = 'det-dot';
     dot.id = `detDot-${i}`;
-    dot.title = `D${i} (XS${i <= 24 ? 1 : (i <= 48 ? 2 : 3)})`;
+    dot.title = `D${i} (XS${i <= chPerMod ? 1 : (i <= chPerMod * 2 ? 2 : 3)})`;
     grid.appendChild(dot);
   }
 }
 
-function updateIndividualChannelsVisual(full72) {
-  if (!full72 || full72.length < 72) return;
+function updateIndividualChannelsVisual(fullData) {
+  if (!fullData || !Array.isArray(fullData) || fullData.length === 0) return;
 
+  const len = fullData.length;
+  const chPerMod = Math.max(1, Math.ceil(len / 3));
   let xs1Sum = 0, xs2Sum = 0, xs3Sum = 0;
+  let xs1Count = 0, xs2Count = 0, xs3Count = 0;
 
-  for (let i = 0; i < 72; i++) {
-    const cps = full72[i];
+  for (let i = 0; i < len; i++) {
+    const cps = Number(fullData[i]) || 0;
     const detNum = i + 1;
     
     // Update numerical value chip
@@ -1315,17 +1421,17 @@ function updateIndividualChannelsVisual(full72) {
       }
     }
 
-    if (i < 24) xs1Sum += cps;
-    else if (i < 48) xs2Sum += cps;
-    else xs3Sum += cps;
+    if (i < chPerMod) { xs1Sum += cps; xs1Count++; }
+    else if (i < chPerMod * 2) { xs2Sum += cps; xs2Count++; }
+    else { xs3Sum += cps; xs3Count++; }
   }
 
   const elXs1 = document.getElementById('modAvgXS1');
-  if (elXs1) elXs1.textContent = `${Math.round(xs1Sum / 24)} CPS`;
+  if (elXs1) elXs1.textContent = `${xs1Count > 0 ? Math.round(xs1Sum / xs1Count) : 0} CPS`;
   const elXs2 = document.getElementById('modAvgXS2');
-  if (elXs2) elXs2.textContent = `${Math.round(xs2Sum / 24)} CPS`;
+  if (elXs2) elXs2.textContent = `${xs2Count > 0 ? Math.round(xs2Sum / xs2Count) : 0} CPS`;
   const elXs3 = document.getElementById('modAvgXS3');
-  if (elXs3) elXs3.textContent = `${Math.round(xs3Sum / 24)} CPS`;
+  if (elXs3) elXs3.textContent = `${xs3Count > 0 ? Math.round(xs3Sum / xs3Count) : 0} CPS`;
 }
 
 // 12. SCANNING ENGINE & LIVE DATA GENERATION
@@ -2005,29 +2111,82 @@ function toggleFirebaseSync() {
 }
 
 // 14. SIDEBAR LOOPS & PARAMETER CONTROLS
-function buildSidebarLoopList() {
+function buildSidebarLoopList(forceRebuild = false) {
   const container = document.getElementById('loopListContainer');
-  container.innerHTML = '';
-  APP_STATE.selectedLoops.clear();
+  if (!container) return;
 
-  for (let i = 1; i <= APP_STATE.totalHeights; i++) {
-    APP_STATE.selectedLoops.add(i);
+  const count = Math.max(1, APP_STATE.totalHeights || 1);
+  const currentItems = container.querySelectorAll('.loop-row');
+
+  // If not modified by user yet and selectedLoops is empty, populate default 1..count
+  if (!APP_STATE.userModifiedLoops && APP_STATE.selectedLoops.size === 0) {
+    for (let i = 1; i <= count; i++) {
+      APP_STATE.selectedLoops.add(i);
+    }
+  }
+
+  // If already built with matching count and not forced, only sync checkbox states
+  if (!forceRebuild && currentItems.length === count) {
+    for (let i = 1; i <= count; i++) {
+      const cb = document.getElementById(`loopCheck-${i}`);
+      if (cb) {
+        cb.checked = APP_STATE.selectedLoops.has(i);
+      }
+    }
+    const countBadge = document.getElementById('sidebarLoopCountText');
+    if (countBadge) countBadge.textContent = `${count} Loops`;
+    return;
+  }
+
+  // Adjust selectedLoops for new count
+  if (!APP_STATE.userModifiedLoops) {
+    APP_STATE.selectedLoops.clear();
+    for (let i = 1; i <= count; i++) {
+      APP_STATE.selectedLoops.add(i);
+    }
+  } else {
+    for (const num of Array.from(APP_STATE.selectedLoops)) {
+      if (num > count) {
+        APP_STATE.selectedLoops.delete(num);
+      }
+    }
+  }
+
+  container.innerHTML = '';
+
+  for (let i = 1; i <= count; i++) {
+    const isChecked = APP_STATE.selectedLoops.has(i);
     const item = document.createElement('div');
     item.className = 'loop-row';
     item.id = `loopItem-${i}`;
+    item.onclick = (e) => handleLoopRowClick(e, i);
     item.innerHTML = `
       <div class="loop-left">
-        <input type="checkbox" class="loop-checkbox" checked onchange="toggleLoopSelection(${i}, this.checked)">
+        <input type="checkbox" id="loopCheck-${i}" class="loop-checkbox" ${isChecked ? 'checked' : ''} onchange="toggleLoopSelection(${i}, this.checked)" onclick="event.stopPropagation()">
         <span class="loop-name">Loop ${i < 10 ? '0' + i : i}</span>
       </div>
       <span class="loop-height-tag">${i * 35} cm</span>
     `;
     container.appendChild(item);
   }
-  document.getElementById('sidebarLoopCountText').textContent = `${APP_STATE.totalHeights} Loops`;
+  const countBadge = document.getElementById('sidebarLoopCountText');
+  if (countBadge) countBadge.textContent = `${count} Loops`;
+}
+
+function handleLoopRowClick(event, loopNum) {
+  // If clicked directly on the input checkbox, let onchange handle it
+  if (event.target && event.target.tagName && event.target.tagName.toLowerCase() === 'input') {
+    return;
+  }
+  const cb = document.getElementById(`loopCheck-${loopNum}`);
+  if (cb) {
+    cb.checked = !cb.checked;
+    toggleLoopSelection(loopNum, cb.checked);
+  }
 }
 
 function toggleLoopSelection(loopNum, isChecked) {
+  APP_STATE.userModifiedLoops = true;
   if (isChecked) {
     APP_STATE.selectedLoops.add(loopNum);
   } else {
@@ -2037,18 +2196,21 @@ function toggleLoopSelection(loopNum, isChecked) {
 }
 
 function selectAllLoops(shouldSelect) {
+  APP_STATE.userModifiedLoops = true;
+  const count = Math.max(1, APP_STATE.totalHeights || 1);
   const checkboxes = document.querySelectorAll('#loopListContainer input[type="checkbox"]');
   checkboxes.forEach((cb, idx) => {
+    const loopNum = idx + 1;
     cb.checked = shouldSelect;
-    if (shouldSelect) APP_STATE.selectedLoops.add(idx + 1);
-    else APP_STATE.selectedLoops.delete(idx + 1);
+    if (shouldSelect) APP_STATE.selectedLoops.add(loopNum);
+    else APP_STATE.selectedLoops.delete(loopNum);
   });
   renderMatrixHeatmap();
 }
 
 function updateTotalHeights(val) {
   APP_STATE.totalHeights = parseInt(val) || 10;
-  buildSidebarLoopList();
+  buildSidebarLoopList(true);
   document.getElementById('headerHeightProgress').textContent = `0 / ${APP_STATE.totalHeights}`;
   renderMatrixHeatmap();
 }
@@ -2151,18 +2313,21 @@ function switchViewMode(mode) {
 function updateRawTable() {
   const headerRow = document.getElementById('tableHeaderRow');
   const tbody = document.getElementById('tableBodyRows');
+  if (!headerRow || !tbody) return;
 
-  if (headerRow.children.length === 0) {
-    let thHtml = '<th>Height</th>';
-    for (let c = 1; c <= 72; c++) {
-      thHtml += `<th>D${c < 10 ? '0' + c : c}</th>`;
-    }
-    headerRow.innerHTML = thHtml;
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0])
+    ? APP_STATE.matrixData[0].length
+    : (APP_STATE.totalChannels || 72);
+
+  let thHtml = '<th>Height</th>';
+  for (let c = 1; c <= numCols; c++) {
+    thHtml += `<th>D${c < 10 ? '0' + c : c}</th>`;
   }
+  headerRow.innerHTML = thHtml;
 
   tbody.innerHTML = '';
   APP_STATE.matrixData.forEach((row, hIdx) => {
-    let tr = `<tr><td><strong style="color:#60A5FA;">L${hIdx + 1}</strong></td>`;
+    let tr = `<tr><td><strong style="color:#60A5FA;">L${hIdx + 1 < 10 ? '0' + (hIdx + 1) : (hIdx + 1)}</strong></td>`;
     row.forEach(cps => {
       const cls = cps >= APP_STATE.hotspotThreshold ? 'class="cell-hotspot"' : '';
       tr += `<td ${cls}>${cps}</td>`;
@@ -3054,6 +3219,8 @@ function onObjectSelectChange(selectedName) {
     showToast('warning', 'Sedang Memindai', 'Harap tunggu atau hentikan pemindaian sebelum mengganti objek.');
     return;
   }
+  APP_STATE.userModifiedLoops = false;
+  APP_STATE.selectedLoops.clear();
   APP_STATE.objectName = (selectedName === 'ALL') ? 'Gentong' : selectedName;
   loadObjectDataFromTiDB(selectedName, true);
 }
@@ -3115,13 +3282,18 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
         let totalCellCount = 0;
 
         sorted.forEach(rec => {
-          if (rec.detector_data && Array.isArray(rec.detector_data)) {
-            matrixFromDb.push(rec.detector_data);
-            rec.detector_data.forEach((cps, idx) => {
-              totalSumCps += cps;
+          let detData = rec.detector_data;
+          if (typeof detData === 'string') {
+            try { detData = JSON.parse(detData); } catch(e) {}
+          }
+          if (detData && Array.isArray(detData) && detData.length > 0) {
+            matrixFromDb.push(detData);
+            detData.forEach((cps, idx) => {
+              const numVal = Number(cps) || 0;
+              totalSumCps += numVal;
               totalCellCount++;
-              if (cps > globalPeakCps) {
-                globalPeakCps = cps;
+              if (numVal > globalPeakCps) {
+                globalPeakCps = numVal;
                 peakChannelIdx = idx + 1;
               }
             });
@@ -3129,11 +3301,16 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
         });
 
         if (matrixFromDb.length > 0) {
+          const detectedRows = matrixFromDb.length;
+          const detectedCols = matrixFromDb[0].length;
+          const prevTotalHeights = APP_STATE.totalHeights;
+
           APP_STATE.matrixData = matrixFromDb;
-          APP_STATE.totalHeights = matrixFromDb.length;
-          APP_STATE.currentHeight = matrixFromDb.length;
+          APP_STATE.totalHeights = detectedRows;
+          APP_STATE.currentHeight = detectedRows;
           APP_STATE.totalLoops = latest.total_loops || 1;
           APP_STATE.objectMaxCps = globalPeakCps || 44;
+          APP_STATE.totalChannels = detectedCols;
 
           if (objectName !== 'ALL') {
             APP_STATE.objectName = objectName;
@@ -3142,20 +3319,32 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
           }
 
           // Update HUD indicators
-          document.getElementById('headerHeightProgress').textContent = `${matrixFromDb.length} / ${matrixFromDb.length}`;
+          document.getElementById('headerHeightProgress').textContent = `${detectedRows} / ${detectedRows}`;
           document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
 
           // Update Quick Inputs
           const qSteps = document.getElementById('inputTotalHeight');
-          if (qSteps) qSteps.value = matrixFromDb.length;
+          if (qSteps) qSteps.value = detectedRows;
           const qLoops = document.getElementById('inputTotalLoops');
           if (qLoops) qLoops.value = APP_STATE.totalLoops;
 
+          // Update Total Channels KPI
+          const chEl = document.getElementById('metricTotalChannels');
+          if (chEl) chEl.innerHTML = `${detectedCols} <span class="kpi-unit">Ch</span>`;
+
+          // Update Module Zone markers strip
+          updateModuleMarkers(detectedCols);
+
           // Update KPI telemetry
           const avgCpsVal = totalCellCount > 0 ? (totalSumCps / totalCellCount).toFixed(1) : '0.0';
-          document.getElementById('metricActiveLoop').innerHTML = `${matrixFromDb.length} <span class="kpi-unit">/ ${matrixFromDb.length}</span>`;
+          document.getElementById('metricActiveLoop').innerHTML = `${detectedRows} <span class="kpi-unit">/ ${detectedRows}</span>`;
           document.getElementById('metricMaxCps').innerHTML = `${globalPeakCps} <span class="kpi-unit">cps</span>`;
-          document.getElementById('metricMaxChannel').textContent = `Detector D${peakChannelIdx} (XS${peakChannelIdx <= 24 ? 1 : (peakChannelIdx <= 48 ? 2 : 3)})`;
+          
+          const chPerMod = Math.max(1, Math.ceil(detectedCols / 3));
+          let modLabel = 'XS1';
+          if (peakChannelIdx > chPerMod && peakChannelIdx <= chPerMod * 2) modLabel = 'XS2';
+          else if (peakChannelIdx > chPerMod * 2) modLabel = 'XS3';
+          document.getElementById('metricMaxChannel').textContent = `Detector D${peakChannelIdx < 10 ? '0' + peakChannelIdx : peakChannelIdx} (${modLabel})`;
           document.getElementById('metricAvgCps').innerHTML = `${avgCpsVal} <span class="kpi-unit">cps</span>`;
           document.getElementById('metricTotalCounts').innerHTML = `${totalSumCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
 
@@ -3163,7 +3352,7 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
           if (globalPeakCps >= APP_STATE.hotspotThreshold) {
             const peakHeightRow = matrixFromDb.findIndex(row => row.includes(globalPeakCps));
             const estZ = peakHeightRow >= 0 ? (peakHeightRow + 1) * 35 : 175;
-            const estX = Math.round((peakChannelIdx / 72) * 800);
+            const estX = Math.round((peakChannelIdx / detectedCols) * 800);
             APP_STATE.estimatedSource = {
               x: estX,
               y: -30.0,
@@ -3175,14 +3364,16 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
             document.getElementById('statPosZ').textContent = `${APP_STATE.estimatedSource.z} cm`;
             document.getElementById('statConfidence').textContent = `${APP_STATE.estimatedSource.confidence}% Confidence`;
             document.getElementById('statConfidenceVal').textContent = `${APP_STATE.estimatedSource.confidence}%`;
-            document.getElementById('statHotspotCount').textContent = `XS${peakChannelIdx <= 24 ? 1 : (peakChannelIdx <= 48 ? 2 : 3)} (D${peakChannelIdx})`;
+            document.getElementById('statHotspotCount').textContent = `${modLabel} (D${peakChannelIdx < 10 ? '0' + peakChannelIdx : peakChannelIdx})`;
           }
 
-          // Update 72 individual detector readouts if visual elements present
+          // Update individual detector readouts if visual elements present
           updateIndividualChannelsVisual(matrixFromDb[matrixFromDb.length - 1]);
 
-          // Rebuild sidebar loops & views with dynamic loop count from TiDB
-          buildSidebarLoopList();
+          // Rebuild sidebar loops: only force rebuild if row count changed or user manually switched
+          const shouldRebuild = (prevTotalHeights !== detectedRows) || showNotification;
+          buildSidebarLoopList(shouldRebuild);
+          updateColorbarGradient();
           renderMatrixHeatmap();
           render3DSourceViewport();
           renderTopViewXZ();
@@ -3190,8 +3381,8 @@ function loadObjectDataFromTiDB(objectName = 'ALL', showNotification = false) {
 
           if (showNotification) {
             const displayTitle = objectName === 'ALL' ? 'Semua Objek (Terbaru)' : objectName;
-            showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${displayTitle}</b> (${matrixFromDb.length} baris loop) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
-            logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${displayTitle}</strong> (${matrixFromDb.length} baris level | Peak: ${globalPeakCps} CPS)`);
+            showToast('success', 'Objek Dimuat', `Menampilkan data scan <b>${displayTitle}</b> (${matrixFromDb.length} baris loop | ${detectedCols} Detektor) dari <b>${data.source === 'tidb_cloud' ? 'TiDB Cloud' : 'Database'}</b>.`);
+            logTerminal(`<span class="log-badge-ok">[TiDB CLOUD]</span> Menampilkan data objek <strong>${displayTitle}</strong> (${matrixFromDb.length} baris level | ${detectedCols} Detektor | Peak: ${globalPeakCps} CPS)`);
           }
         }
       } else {
