@@ -3,7 +3,7 @@
 @section('title', 'RADIOSCAN MATRIX v2.0 — 72-Ch Radiation Array Detector')
 
 @section('styles')
-  <link rel="stylesheet" href="{{ asset('css/matrix.css') }}">
+  <link rel="stylesheet" href="{{ asset('css/matrix.css') }}?v={{ time() }}">
 @endsection
 
 @section('content')
@@ -243,7 +243,7 @@
         <div class="palette-picker">
           <span>Palette:</span>
           <select id="paletteSelect" onchange="changeColorPalette(this.value)">
-            <option value="plasma" selected>Plasma (Raspi GUI / Matplotlib)</option>
+            <option value="plasma" selected>Plasma (Raspi GUI Inverted)</option>
             <option value="turbo">Turbo (Scientific)</option>
             <option value="jet">Jet / Rainbow</option>
             <option value="viridis">Viridis</option>
