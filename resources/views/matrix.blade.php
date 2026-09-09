@@ -2281,6 +2281,7 @@ function toggleLoopSelection(loopNum, isChecked) {
     APP_STATE.selectedLoops.delete(loopNum);
   }
   renderMatrixHeatmap();
+  updateRawTable();
 }
 
 function selectAllLoops(shouldSelect) {
@@ -2294,6 +2295,7 @@ function selectAllLoops(shouldSelect) {
     else APP_STATE.selectedLoops.delete(loopNum);
   });
   renderMatrixHeatmap();
+  updateRawTable();
 }
 
 function updateTotalHeights(val) {
@@ -2406,26 +2408,55 @@ function updateRawTable() {
   const tbody = document.getElementById('tableBodyRows');
   if (!headerRow || !tbody) return;
 
-  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0])
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
     ? APP_STATE.matrixData[0].length
     : (APP_STATE.totalChannels || 72);
+  const numRows = Math.max(1, APP_STATE.totalHeights || (APP_STATE.matrixData.length || 5));
 
-  let thHtml = '<th>Height</th>';
+  let thHtml = '<th style="text-align:left;padding-left:12px;">Height / Blok</th>';
   for (let c = 1; c <= numCols; c++) {
     thHtml += `<th>D${c < 10 ? '0' + c : c}</th>`;
   }
   headerRow.innerHTML = thHtml;
 
   tbody.innerHTML = '';
-  APP_STATE.matrixData.forEach((row, hIdx) => {
-    let tr = `<tr><td><strong style="color:#60A5FA;">L${hIdx + 1 < 10 ? '0' + (hIdx + 1) : (hIdx + 1)}</strong></td>`;
-    row.forEach(cps => {
-      const cls = cps >= APP_STATE.hotspotThreshold ? 'class="cell-hotspot"' : '';
-      tr += `<td ${cls}>${cps}</td>`;
-    });
-    tr += '</tr>';
-    tbody.innerHTML += tr;
-  });
+
+  // Render rows matching the Heatmap Matrix layout (Blok terbaru di atas: r = 0 adalah baris teratas)
+  for (let r = 0; r < numRows; r++) {
+    const actualRowIndex = (numRows - 1) - r;
+    const blokNum = actualRowIndex + 1;
+    const isCompleted = actualRowIndex >= 0 && actualRowIndex < APP_STATE.matrixData.length;
+    const rowData = isCompleted ? APP_STATE.matrixData[actualRowIndex] : null;
+    const isLoopSelected = APP_STATE.selectedLoops.has(blokNum);
+
+    if (isCompleted && isLoopSelected && rowData) {
+      let tr = `<tr><td style="text-align:left;padding-left:12px;"><strong style="color:#60A5FA;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</strong> <span style="font-size:10px;color:var(--text-muted);">(${blokNum * 35} cm)</span></td>`;
+      for (let c = 0; c < numCols; c++) {
+        const cps = (rowData[c] !== undefined) ? Number(rowData[c]) : 0;
+        const isHotspot = cps >= APP_STATE.hotspotThreshold && APP_STATE.hotspotThreshold > 0;
+        const cls = isHotspot ? 'class="cell-hotspot"' : '';
+        tr += `<td ${cls}>${cps}</td>`;
+      }
+      tr += '</tr>';
+      tbody.innerHTML += tr;
+    } else if (isCompleted && !isLoopSelected && rowData) {
+      // Unselected in sidebar (dimmed/grayed out row matching heatmap matrix)
+      let tr = `<tr class="row-unselected"><td style="text-align:left;padding-left:12px;"><span style="color:#64748b;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</span> <span style="font-size:10px;color:#64748b;">(${blokNum * 35} cm)</span></td>`;
+      for (let c = 0; c < numCols; c++) {
+        tr += `<td style="color:#64748b;">--</td>`;
+      }
+      tr += '</tr>';
+      tbody.innerHTML += tr;
+    } else {
+      // Not completed yet
+      let tr = `<tr class="row-unselected"><td style="text-align:left;padding-left:12px;"><span style="color:#64748b;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</span> <span style="font-size:10px;color:#64748b;">(${blokNum * 35} cm)</span></td>`;
+      for (let c = 0; c < numCols; c++) {
+        tr += `<td style="color:#64748b;">--</td>`;
+      }
+      tr += '</tr>';
+      tbody.innerHTML += tr;
+    }
+  }
 }
 
 function generateScientificMatrixCsv() {

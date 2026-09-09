@@ -1339,6 +1339,18 @@ html.light-mode .deck-object-select {
   font-weight: 700;
 }
 
+.matrix-raw-table tr.row-unselected td {
+  opacity: 0.35;
+  color: #64748b !important;
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+html.light-mode .matrix-raw-table tr.row-unselected td {
+  opacity: 0.38;
+  color: #94a3b8 !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
 /* ==========================================================================
    5. SPATIAL & 3D LOCALIZATION CARDS
    ========================================================================== */
