@@ -648,16 +648,19 @@ try {
   console.warn("[Firebase] Init error (running in local simulation mode):", err);
 }
 
-// 3. COLOR PALETTE DEFINITIONS & INTERPOLATORS (WITH DYNAMIC SCALING)
+// 3. COLOR PALETTE DEFINITIONS & INTERPOLATORS (WITH DYNAMIC SCALING & INVERTED POLARITY)
 function getColorForValue(val, maxVal = null, palette = APP_STATE.currentPalette) {
   if (val === undefined || val === null || isNaN(val)) {
     return isLightMode() ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.04)';
   }
   const effectiveMax = (maxVal && maxVal > 0) ? maxVal : Math.max(1, APP_STATE.objectMaxCps || 17);
-  const t = Math.max(0, Math.min(1, Number(val) / effectiveMax));
+  const norm = Math.max(0, Math.min(1, Number(val) / effectiveMax));
   
+  // Inverted scaling matching GUI: Nilai tinggi -> Semakin Gelap (Deep Blue), Nilai rendah -> Semakin Terang (Bright Yellow)
+  const t = 1 - norm;
+
   if (palette === 'plasma') {
-    // Matplotlib Plasma Colormap (Deep Blue -> Violet -> Magenta -> Orange -> Bright Yellow)
+    // Matplotlib Plasma_r Colormap (Low CPS = Bright Yellow -> Orange -> Magenta -> Violet -> High CPS = Deep Blue)
     if (t < 0.25) {
       const f = t / 0.25;
       return `rgb(${Math.round(13 + f * 113)}, ${Math.round(8 - f * 5)}, ${Math.round(135 + f * 33)})`;
@@ -1099,15 +1102,17 @@ function render8x9GridView(width, height) {
       const y = r * cellH;
       const avgVal = detectorAverages[detIndex] || 0;
 
-      ctx.fillStyle = getColorForValue(avgVal, 350);
+      const dynamicMax = Math.max(1, APP_STATE.objectMaxCps || 17);
+      ctx.fillStyle = getColorForValue(avgVal, dynamicMax);
       ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
 
-      ctx.fillStyle = avgVal > 150 ? '#000000' : '#FFFFFF';
+      const isDark = (avgVal / dynamicMax) > 0.45;
+      ctx.fillStyle = isDark ? '#FFFFFF' : '#000000';
       ctx.font = 'bold 11px "IBM Plex Mono"';
       ctx.textAlign = 'center';
       ctx.fillText(`${avgVal.toFixed(0)}`, x + cellW / 2, y + cellH / 2 + 4);
       
-      ctx.fillStyle = avgVal > 150 ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.4)';
+      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
       ctx.font = '8px "IBM Plex Mono"';
       ctx.fillText(`D${detIndex + 1}`, x + 16, y + 12);
     }
