@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Cache;
 
 class MatrixController extends Controller
 {
@@ -24,84 +25,53 @@ class MatrixController extends Controller
     {
         $objectFilter = $request->query('object_name');
         $sessionFilter = $request->query('session_id');
+        $bustCache = $request->boolean('refresh', false);
         $defaultLimit = (!empty($objectFilter) && $objectFilter !== 'ALL') ? 100 : 24;
         $limit = (int) $request->query('limit', $defaultLimit);
 
         $rows = [];
         $availableObjects = [];
-        $availableSessions = [];
         $source = 'tidb_cloud';
 
         // 1. Prioritas Utama: Ambil langsung dari TiDB Cloud (MySQL Connection)
         try {
-            // Ambil daftar seluruh objek yang pernah di-scan
-            $rawObjects = DB::table('scan_matrix')
-                ->select(
-                    'object_name',
-                    DB::raw('COUNT(*) as total_records'),
-                    DB::raw('MAX(timestamp) as last_ts'),
-                    DB::raw('MAX(created_at) as last_created'),
-                    DB::raw('MAX(max_cps) as peak_cps'),
-                    DB::raw('ROUND(AVG(avg_cps), 1) as mean_cps'),
-                    DB::raw('MAX(height_level) as max_height'),
-                    DB::raw('MAX(total_loops) as total_loops')
-                )
-                ->whereNotNull('object_name')
-                ->where('object_name', '<>', '')
-                ->groupBy('object_name')
-                ->orderBy('last_created', 'desc')
-                ->get();
-
-            $availableObjects = [];
-            foreach ($rawObjects as $obj) {
-                $latestRow = DB::table('scan_matrix')
-                    ->where('object_name', $obj->object_name)
-                    ->orderBy('id', 'desc')
-                    ->first(['detector_data', 'total_loops']);
-
-                $loopCount = (int) ($obj->total_loops ?: 1);
-                if ($latestRow && !empty($latestRow->detector_data)) {
-                    $det = is_string($latestRow->detector_data) ? json_decode($latestRow->detector_data, true) : $latestRow->detector_data;
-                    if (is_array($det) && count($det) > 0) {
-                        $loopCount = (int) ceil(count($det) / 3);
-                    }
-                }
-                if ($loopCount <= 0) $loopCount = 1;
-
-                $objArr = (array) $obj;
-                $objArr['loops'] = $loopCount;
-                $availableObjects[] = (object) $objArr;
+            if ($bustCache) {
+                Cache::forget('tidb_available_objects');
             }
 
-            // Ambil daftar sesi terbaru
-            $availableSessions = DB::table('scan_matrix')
-                ->select(
-                    'session_id',
-                    'object_name',
-                    DB::raw('COUNT(*) as total_records'),
-                    DB::raw('MAX(timestamp) as last_ts'),
-                    DB::raw('MAX(created_at) as last_created'),
-                    DB::raw('MAX(max_cps) as peak_cps'),
-                    DB::raw('MAX(height_level) as max_height'),
-                    DB::raw('MAX(total_loops) as total_loops')
-                )
-                ->whereNotNull('session_id')
-                ->where('session_id', '<>', '')
-                ->groupBy('session_id', 'object_name')
-                ->orderBy('last_created', 'desc')
-                ->limit(20)
-                ->get()
-                ->toArray();
+            // Ambil daftar seluruh objek yang pernah di-scan (Query Tunggal & Cache 15s untuk respon instan)
+            $availableObjects = Cache::remember('tidb_available_objects', 15, function () {
+                $rawObjects = DB::table('scan_matrix')
+                    ->select(
+                        'object_name',
+                        DB::raw('COUNT(*) as total_records'),
+                        DB::raw('MAX(timestamp) as last_ts'),
+                        DB::raw('MAX(created_at) as last_created'),
+                        DB::raw('MAX(max_cps) as peak_cps'),
+                        DB::raw('ROUND(AVG(avg_cps), 1) as mean_cps'),
+                        DB::raw('MAX(height_level) as max_height'),
+                        DB::raw('COALESCE(MAX(total_loops), 1) as loops')
+                    )
+                    ->whereNotNull('object_name')
+                    ->where('object_name', '<>', '')
+                    ->groupBy('object_name')
+                    ->orderBy('last_created', 'desc')
+                    ->get();
+
+                return $rawObjects->toArray();
+            });
 
             // Jika objectFilter kosong atau 'ALL', ambil object paling baru dari daftar
             if (empty($objectFilter) || $objectFilter === 'ALL') {
                 if (!empty($availableObjects)) {
-                    $objectFilter = $availableObjects[0]->object_name ?? 'Sample_new';
+                    $firstObj = (array) $availableObjects[0];
+                    $objectFilter = $firstObj['object_name'] ?? 'Sample_new';
                 } else {
                     $objectFilter = 'Sample_new';
                 }
             }
 
+            // Ambil data matriks record untuk objectFilter
             $query = DB::table('scan_matrix');
             if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
                 $query->where('session_id', $sessionFilter);
@@ -120,7 +90,7 @@ class MatrixController extends Controller
                 }
             }
 
-            $records = $query->orderBy('id', 'desc')->limit(100)->get();
+            $records = $query->orderBy('id', 'desc')->limit($limit)->get();
             if ($records->isNotEmpty()) {
                 $rows = $records->map(function ($item) {
                     return (array) $item;
@@ -284,6 +254,7 @@ class MatrixController extends Controller
         try {
             DB::table('scan_matrix')->insert($insertRows);
             $savedCount = count($insertRows);
+            Cache::forget('tidb_available_objects');
         } catch (\Exception $e) {
             // Fallback: SQLite
             $dbStatus = 'sqlite_local';
