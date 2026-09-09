@@ -1171,34 +1171,78 @@ function render8x9GridView(width, height) {
   ctx.fillStyle = isLight ? '#f8fafc' : '#040711';
   ctx.fillRect(0, 0, width, height);
 
-  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0]) ? APP_STATE.matrixData[0].length : 72;
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
+    ? APP_STATE.matrixData[0].length
+    : (APP_STATE.totalChannels || 72);
+
+  // Dynamic Grid Dimensions based on channels and 3 Xiao modules:
   let rows = 8;
   let cols = 9;
-  if (numCols === 15) {
+  if (numCols === 12) {
     rows = 3;
-    cols = 5;
+    cols = 4; // 3 modules × 4 channels (XS1: D1-D4, XS2: D5-D8, XS3: D9-D12)
+  } else if (numCols === 15) {
+    rows = 3;
+    cols = 5; // 3 modules × 5 channels
   } else if (numCols === 24) {
-    rows = 4;
-    cols = 6;
-  } else if (numCols !== 72) {
+    rows = 3;
+    cols = 8; // 3 modules × 8 channels
+  } else if (numCols === 36) {
+    rows = 3;
+    cols = 12; // 3 modules × 12 channels
+  } else if (numCols === 72) {
+    rows = 8;
+    cols = 9; // Standard 8x9 72-channel grid
+  } else {
     cols = Math.ceil(Math.sqrt(numCols));
     rows = Math.ceil(numCols / cols);
+  }
+
+  // Update tab button label dynamically
+  const tabGridBtn = document.getElementById('tabBtnGrid');
+  if (tabGridBtn) {
+    const labelText = numCols === 72 ? '8×9 Grid' : `${rows}×${cols} Grid`;
+    tabGridBtn.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      ${labelText}
+    `;
   }
 
   const cellW = width / cols;
   const cellH = height / rows;
 
+  // Calculate detector averages respecting selectedLoops
   const detectorAverages = new Array(numCols).fill(0);
+  const detectorPeaks = new Array(numCols).fill(0);
+  let selectedCount = 0;
+
   if (APP_STATE.matrixData.length > 0) {
     for (let r = 0; r < APP_STATE.matrixData.length; r++) {
+      const blokNum = r + 1;
+      if (!APP_STATE.selectedLoops.has(blokNum)) continue; // Only include selected bloks
+      
+      selectedCount++;
+      const row = APP_STATE.matrixData[r] || [];
       for (let c = 0; c < numCols; c++) {
-        detectorAverages[c] += (APP_STATE.matrixData[r][c] || 0);
+        const v = Number(row[c]) || 0;
+        detectorAverages[c] += v;
+        if (v > detectorPeaks[c]) detectorPeaks[c] = v;
       }
     }
-    for (let c = 0; c < numCols; c++) {
-      detectorAverages[c] = Math.round(detectorAverages[c] / APP_STATE.matrixData.length);
+
+    if (selectedCount > 0) {
+      for (let c = 0; c < numCols; c++) {
+        detectorAverages[c] = Math.round(detectorAverages[c] / selectedCount);
+      }
     }
   }
+
+  let maxAvgVal = 0;
+  for (let c = 0; c < numCols; c++) {
+    if (detectorAverages[c] > maxAvgVal) maxAvgVal = detectorAverages[c];
+  }
+  const dynamicMax = Math.max(10, maxAvgVal || APP_STATE.objectMaxCps || 17);
+  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -1206,21 +1250,54 @@ function render8x9GridView(width, height) {
       if (detIndex >= numCols) continue;
       const x = c * cellW;
       const y = r * cellH;
-      const avgVal = detectorAverages[detIndex] || 0;
+      const avgVal = selectedCount > 0 ? (detectorAverages[detIndex] || 0) : 0;
+      const peakVal = detectorPeaks[detIndex] || 0;
+      const isHotspot = avgVal >= APP_STATE.hotspotThreshold || (peakVal >= APP_STATE.hotspotThreshold && peakVal > 0);
 
-      const dynamicMax = Math.max(1, APP_STATE.objectMaxCps || 17);
-      ctx.fillStyle = getColorForValue(avgVal, dynamicMax);
-      ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+      let modLabel = 'XS1';
+      if (detIndex + 1 > chPerMod && detIndex + 1 <= chPerMod * 2) modLabel = 'XS2';
+      else if (detIndex + 1 > chPerMod * 2) modLabel = 'XS3';
 
-      const isDark = (avgVal / dynamicMax) > 0.45;
-      ctx.fillStyle = isDark ? '#FFFFFF' : '#000000';
-      ctx.font = 'bold 11px "IBM Plex Mono"';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${avgVal.toFixed(0)}`, x + cellW / 2, y + cellH / 2 + 4);
-      
-      ctx.fillStyle = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-      ctx.font = '8px "IBM Plex Mono"';
-      ctx.fillText(`D${detIndex + 1}`, x + 16, y + 12);
+      if (selectedCount > 0) {
+        ctx.fillStyle = getColorForValue(avgVal, dynamicMax);
+        ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+
+        if (isHotspot) {
+          ctx.strokeStyle = '#F43F5E';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x + 1.5, y + 1.5, cellW - 3, cellH - 3);
+        } else {
+          ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.08)';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
+        }
+
+        const isDark = (avgVal / dynamicMax) > 0.45;
+        ctx.fillStyle = isDark ? '#FFFFFF' : '#0F172A';
+        ctx.font = 'bold 13px "IBM Plex Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${avgVal}`, x + cellW / 2, y + cellH / 2 + 5);
+        
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.65)';
+        ctx.font = '600 9px "IBM Plex Mono", monospace';
+        ctx.fillText(`D${detIndex + 1 < 10 ? '0' + (detIndex + 1) : (detIndex + 1)} (${modLabel})`, x + 35, y + 14);
+      } else {
+        // No bloks selected in sidebar
+        ctx.fillStyle = isLight ? '#f1f5f9' : '#070B16';
+        ctx.fillRect(x + 1, y + 1, cellW - 2, cellH - 2);
+        ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.03)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 1, y + 1, cellW - 2, cellH - 2);
+
+        ctx.fillStyle = '#64748B';
+        ctx.font = 'bold 12px "IBM Plex Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('--', x + cellW / 2, y + cellH / 2 + 4);
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '600 9px "IBM Plex Mono", monospace';
+        ctx.fillText(`D${detIndex + 1 < 10 ? '0' + (detIndex + 1) : (detIndex + 1)}`, x + 25, y + 14);
+      }
     }
   }
   ctx.textAlign = 'left';
@@ -1399,7 +1476,10 @@ function renderTopViewXZ() {
 
 // 10. TOOLTIP & MOUSE INTERACTION
 canvas.addEventListener('mousemove', (e) => {
-  if (APP_STATE.viewMode !== 'matrix' && APP_STATE.viewMode !== 'contour') return;
+  const isMatrix = APP_STATE.viewMode === 'matrix';
+  const isContour = APP_STATE.viewMode === 'contour';
+  const isGrid = APP_STATE.viewMode === 'grid';
+  if (!isMatrix && !isContour && !isGrid) return;
 
   const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
     ? APP_STATE.matrixData[0].length
@@ -1413,12 +1493,74 @@ canvas.addEventListener('mousemove', (e) => {
   const mouseX = (e.clientX - rect.left) * scaleX;
   const mouseY = (e.clientY - rect.top) * scaleY;
 
+  const tooltip = document.getElementById('matrixTooltip');
+
+  if (isGrid) {
+    let rows = 8, cols = 9;
+    if (numCols === 12) { rows = 3; cols = 4; }
+    else if (numCols === 15) { rows = 3; cols = 5; }
+    else if (numCols === 24) { rows = 3; cols = 8; }
+    else if (numCols === 36) { rows = 3; cols = 12; }
+    else if (numCols === 72) { rows = 8; cols = 9; }
+    else { cols = Math.ceil(Math.sqrt(numCols)); rows = Math.ceil(numCols / cols); }
+
+    const cellW = canvas.width / cols;
+    const cellH = canvas.height / rows;
+    const gCol = Math.floor(mouseX / cellW);
+    const gRow = Math.floor(mouseY / cellH);
+    const detIndex = gRow * cols + gCol;
+
+    if (detIndex >= 0 && detIndex < numCols) {
+      const detNumber = detIndex + 1;
+      const chPerMod = Math.max(1, Math.ceil(numCols / 3));
+      let modName = "XS1 (S1)";
+      if (detNumber > chPerMod && detNumber <= chPerMod * 2) modName = "XS2 (S2)";
+      if (detNumber > chPerMod * 2) modName = "XS3 (S3)";
+
+      let sumCps = 0;
+      let countCps = 0;
+      let peakCps = 0;
+      for (let r = 0; r < APP_STATE.matrixData.length; r++) {
+        if (!APP_STATE.selectedLoops.has(r + 1)) continue;
+        const val = Number(APP_STATE.matrixData[r][detIndex]) || 0;
+        sumCps += val;
+        countCps++;
+        if (val > peakCps) peakCps = val;
+      }
+      const avgCps = countCps > 0 ? (sumCps / countCps).toFixed(1) : '--';
+      const doseRate = (avgCps !== '--') ? (parseFloat(avgCps) * 0.012).toFixed(2) : '--';
+      const isHotspot = (avgCps !== '--') && (parseFloat(avgCps) >= APP_STATE.hotspotThreshold);
+
+      document.getElementById('ttDetectorName').textContent = `Detector D${detNumber < 10 ? '0' + detNumber : detNumber}`;
+      document.getElementById('ttModuleTag').textContent = modName;
+      document.getElementById('ttHeightLevel').textContent = `Mean ${countCps} Blok Terpilih`;
+      document.getElementById('ttCoordinates').textContent = `Cell Grid (${gRow + 1}, ${gCol + 1}) | Peak: ${peakCps} CPS`;
+      document.getElementById('ttCpsValue').textContent = (avgCps !== '--') ? `${avgCps} CPS (Rerata)` : 'No Data';
+      document.getElementById('ttDoseRate').textContent = (doseRate !== '--') ? `${doseRate} µSv/h` : '--';
+
+      const ttStatus = document.getElementById('ttStatus');
+      if (isHotspot) {
+        ttStatus.textContent = 'HOTSPOT ALERT';
+        ttStatus.className = 'tt-val hotspot';
+      } else {
+        ttStatus.textContent = 'NORMAL BG';
+        ttStatus.className = 'tt-val';
+        ttStatus.style.color = '#34D399';
+      }
+
+      tooltip.style.display = 'block';
+      tooltip.style.left = `${e.clientX - rect.left}px`;
+      tooltip.style.top = `${e.clientY - rect.top}px`;
+    }
+    return;
+  }
+
   const col = Math.max(0, Math.min(numCols - 1, Math.floor(mouseX / (canvas.width / numCols))));
   const row = Math.max(0, Math.min(numRows - 1, Math.floor(mouseY / (canvas.height / numRows))));
 
   if (col >= 0 && col < numCols && row >= 0 && row < numRows) {
     hoveredCell = { row, col };
-    if (APP_STATE.viewMode === 'matrix') {
+    if (isMatrix) {
       renderMatrixHeatmap();
     }
 
