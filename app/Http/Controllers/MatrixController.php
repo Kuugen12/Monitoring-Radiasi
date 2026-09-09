@@ -35,7 +35,7 @@ class MatrixController extends Controller
         // 1. Prioritas Utama: Ambil langsung dari TiDB Cloud (MySQL Connection)
         try {
             // Ambil daftar seluruh objek yang pernah di-scan
-            $availableObjects = DB::table('scan_matrix')
+            $rawObjects = DB::table('scan_matrix')
                 ->select(
                     'object_name',
                     DB::raw('COUNT(*) as total_records'),
@@ -50,8 +50,28 @@ class MatrixController extends Controller
                 ->where('object_name', '<>', '')
                 ->groupBy('object_name')
                 ->orderBy('last_created', 'desc')
-                ->get()
-                ->toArray();
+                ->get();
+
+            $availableObjects = [];
+            foreach ($rawObjects as $obj) {
+                $latestRow = DB::table('scan_matrix')
+                    ->where('object_name', $obj->object_name)
+                    ->orderBy('id', 'desc')
+                    ->first(['detector_data', 'total_loops']);
+
+                $loopCount = (int) ($obj->total_loops ?: 1);
+                if ($latestRow && !empty($latestRow->detector_data)) {
+                    $det = is_string($latestRow->detector_data) ? json_decode($latestRow->detector_data, true) : $latestRow->detector_data;
+                    if (is_array($det) && count($det) > 0) {
+                        $loopCount = (int) ceil(count($det) / 3);
+                    }
+                }
+                if ($loopCount <= 0) $loopCount = 1;
+
+                $objArr = (array) $obj;
+                $objArr['loops'] = $loopCount;
+                $availableObjects[] = (object) $objArr;
+            }
 
             // Ambil daftar sesi terbaru
             $availableSessions = DB::table('scan_matrix')

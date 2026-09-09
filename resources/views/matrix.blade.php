@@ -3171,8 +3171,8 @@ function populateObjectDropdown(availableObjects, currentSelected) {
       const opt = document.createElement('option');
       opt.value = obj.object_name;
       const count = obj.total_records || 0;
-      const peak = obj.peak_cps || 0;
-      opt.textContent = `${obj.object_name} (${count} data | Max ${peak} CPS)`;
+      const loops = obj.loops || (obj.total_loops || 1);
+      opt.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
       
       if (currentSelected && (currentSelected === obj.object_name || currentSelected === obj.object_name.trim())) {
         opt.selected = true;
@@ -3195,8 +3195,8 @@ function populateObjectDropdown(availableObjects, currentSelected) {
       if (presetContainer) {
         const tag = document.createElement('span');
         tag.className = `preset-tag ${currentSelected === obj.object_name ? 'active' : ''}`;
-        tag.textContent = `${obj.object_name} (${count} scan)`;
-        tag.title = `Peak: ${peak} CPS | Terakhir: ${obj.last_ts || '-'}`;
+        tag.textContent = `${obj.object_name} (${count} data | ${loops} loop)`;
+        tag.title = `Loop: ${loops} | Terakhir: ${obj.last_ts || '-'}`;
         tag.onclick = () => selectObjectPreset(obj.object_name);
         presetContainer.appendChild(tag);
       }
