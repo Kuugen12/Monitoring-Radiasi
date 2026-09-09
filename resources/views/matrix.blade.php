@@ -952,11 +952,11 @@ function renderMatrixHeatmap() {
   if (dynamicMax <= 0) dynamicMax = Math.max(10, APP_STATE.objectMaxCps || 17);
 
   // Draw Heatmap Cells:
-  // Matching Raspberry Pi 5 GUI "Blok (terbaru di atas)":
-  // Top row (r = 0) corresponds to latest blok (last index in matrixData),
-  // Bottom row (r = numRows - 1) corresponds to earliest blok (index 0).
+  // Matching Raspberry Pi 5 GUI "Blok (terbaru di bawah)":
+  // Top row (r = 0) corresponds to Blok 01 (index 0),
+  // Bottom row (r = numRows - 1) corresponds to latest blok (index numRows - 1).
   for (let r = 0; r < numRows; r++) {
-    const actualRowIndex = (numRows - 1) - r;
+    const actualRowIndex = r;
     const isCompleted = actualRowIndex >= 0 && actualRowIndex < APP_STATE.matrixData.length;
     const rowData = isCompleted ? APP_STATE.matrixData[actualRowIndex] : null;
     const blokNum = actualRowIndex + 1;
@@ -1077,8 +1077,8 @@ function renderContourView(width, height) {
 
   for (let py = 0; py < height; py += 2) {
     const normY = py / height;
-    // Map normY = 0 (top) to latest row (numRows - 1) and normY = 1 (bottom) to row 0
-    const rowFloat = (1 - normY) * (numRows - 1);
+    // Map normY = 0 (top) to row 0 (Blok 01) and normY = 1 (bottom) to latest row (numRows - 1)
+    const rowFloat = normY * (numRows - 1);
     const r0 = Math.floor(rowFloat);
     const r1 = Math.min(numRows - 1, r0 + 1);
     const ryRatio = rowFloat - r0;
@@ -1121,7 +1121,7 @@ function renderContourView(width, height) {
 
   // Position of hotspot centroid / peak on contour plane:
   // Column 0 is at px = 0, Column (numCols - 1) is at px = width.
-  // Row 0 (Blok 1, bottom) is at py = height, Row (numRows - 1) (Top Blok) is at py = 0.
+  // Row 0 (Blok 1, top) is at py = 0, Row (numRows - 1) (Bottom Blok) is at py = height.
   let centerCol = 0;
   let centerRow = 0;
   if (APP_STATE.estimatedSource && APP_STATE.estimatedSource.centerCol !== undefined) {
@@ -1133,7 +1133,7 @@ function renderContourView(width, height) {
   }
 
   const cx = numCols > 1 ? (centerCol / (numCols - 1)) * width : width / 2;
-  const cy = numRows > 1 ? ((numRows - 1 - centerRow) / (numRows - 1)) * height : height / 2;
+  const cy = numRows > 1 ? (centerRow / (numRows - 1)) * height : height / 2;
 
   // Draw glowing red hotspot locator target
   ctx.save();
@@ -1571,7 +1571,7 @@ canvas.addEventListener('mousemove', (e) => {
     if (col >= chPerMod && col < chPerMod * 2) modName = "XS2 (S2)";
     if (col >= chPerMod * 2) modName = "XS3 (S3)";
 
-    const actualRowIndex = (numRows - 1) - row;
+    const actualRowIndex = row;
     const blokNum = actualRowIndex + 1;
     const isAvailable = actualRowIndex >= 0 && actualRowIndex < APP_STATE.matrixData.length;
     const cpsVal = (isAvailable && APP_STATE.matrixData[actualRowIndex] && APP_STATE.matrixData[actualRowIndex][col] !== undefined)
@@ -1582,8 +1582,8 @@ canvas.addEventListener('mousemove', (e) => {
 
     document.getElementById('ttDetectorName').textContent = `Detector D${detNumber < 10 ? '0' + detNumber : detNumber}`;
     document.getElementById('ttModuleTag').textContent = modName;
-    document.getElementById('ttHeightLevel').textContent = `Loop ${blokNum < 10 ? '0' + blokNum : blokNum} (${blokNum * 35} cm)`;
-    document.getElementById('ttCoordinates').textContent = `D${detNumber < 10 ? '0' + detNumber : detNumber}, Loop ${blokNum < 10 ? '0' + blokNum : blokNum}`;
+    document.getElementById('ttHeightLevel').textContent = `Blok ${blokNum < 10 ? '0' + blokNum : blokNum} (${blokNum * 35} cm)`;
+    document.getElementById('ttCoordinates').textContent = `D${detNumber < 10 ? '0' + detNumber : detNumber}, Blok ${blokNum < 10 ? '0' + blokNum : blokNum}`;
     document.getElementById('ttCpsValue').textContent = (cpsVal !== '--') ? `${cpsVal} CPS` : 'No Data';
     document.getElementById('ttDoseRate').textContent = isAvailable ? `${doseRate} µSv/h` : '--';
     
@@ -2563,9 +2563,9 @@ function updateRawTable() {
 
   tbody.innerHTML = '';
 
-  // Render rows matching the Heatmap Matrix layout (Blok terbaru di atas: r = 0 adalah baris teratas)
+  // Render rows matching the Heatmap Matrix layout (Blok 01 di atas, Blok N di bawah: r = 0 adalah Blok 01)
   for (let r = 0; r < numRows; r++) {
-    const actualRowIndex = (numRows - 1) - r;
+    const actualRowIndex = r;
     const blokNum = actualRowIndex + 1;
     const isCompleted = actualRowIndex >= 0 && actualRowIndex < APP_STATE.matrixData.length;
     const rowData = isCompleted ? APP_STATE.matrixData[actualRowIndex] : null;
