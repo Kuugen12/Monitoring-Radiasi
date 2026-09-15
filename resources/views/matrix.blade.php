@@ -831,14 +831,14 @@ function recompute3DSourceLocalization() {
   const numRows = APP_STATE.matrixData.length;
   const numCols = (APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0) ? APP_STATE.matrixData[0].length : 72;
   
-  let globalPeakCps = 0;
+  let globalPeakCps = -1;
   let peakRow = 0;
   let peakCol = 0;
-  let totalWeight = 0;
-  let weightedCol = 0;
-  let weightedRow = 0;
 
+  // 1. Cari titik dengan nilai CPS absolut tertinggi (sumber nilai paling tinggi / titik gelap)
   for (let r = 0; r < numRows; r++) {
+    const blokNum = r + 1;
+    if (APP_STATE.selectedLoops.size > 0 && !APP_STATE.selectedLoops.has(blokNum)) continue;
     const row = APP_STATE.matrixData[r];
     if (!row) continue;
     for (let c = 0; c < numCols; c++) {
@@ -848,20 +848,56 @@ function recompute3DSourceLocalization() {
         peakRow = r;
         peakCol = c;
       }
-      // Weight values above background baseline for sub-cell centroid localization
-      const threshold = Math.max(20, (APP_STATE.hotspotThreshold || 100) * 0.3);
-      if (val > threshold) {
-        const w = Math.pow(val - threshold, 1.5);
-        weightedCol += c * w;
-        weightedRow += r * w;
-        totalWeight += w;
+    }
+  }
+
+  // Fallback jika tidak ada row terpilih yang memiliki data
+  if (globalPeakCps < 0) {
+    for (let r = 0; r < numRows; r++) {
+      const row = APP_STATE.matrixData[r];
+      if (!row) continue;
+      for (let c = 0; c < numCols; c++) {
+        const val = Number(row[c]) || 0;
+        if (val > globalPeakCps) {
+          globalPeakCps = val;
+          peakRow = r;
+          peakCol = c;
+        }
       }
     }
   }
 
-  // Exact continuous / sub-pixel center of radiation hotspot
-  const centerCol = (totalWeight > 0) ? (weightedCol / totalWeight) : peakCol;
-  const centerRow = (totalWeight > 0) ? (weightedRow / totalWeight) : peakRow;
+  if (globalPeakCps < 0) globalPeakCps = 0;
+
+  // 2. Presisi lokal: Lakukan penghalusan sub-pixel HANYA pada lingkungan 3x3 di sekitar puncak tertinggi (peakRow, peakCol)
+  // Ini memastikan titik target selalu berada tepat di sumber nilai paling tinggi (berwarna gelap) dan tidak tertarik ke area kosong/kuning
+  let localWeight = 0;
+  let localWeightedCol = 0;
+  let localWeightedRow = 0;
+  const localCutoff = globalPeakCps * 0.75;
+
+  for (let dr = -1; dr <= 1; dr++) {
+    const r = peakRow + dr;
+    if (r < 0 || r >= numRows) continue;
+    const blokNum = r + 1;
+    if (APP_STATE.selectedLoops.size > 0 && !APP_STATE.selectedLoops.has(blokNum)) continue;
+    const row = APP_STATE.matrixData[r];
+    if (!row) continue;
+    for (let dc = -1; dc <= 1; dc++) {
+      const c = peakCol + dc;
+      if (c < 0 || c >= numCols) continue;
+      const val = Number(row[c]) || 0;
+      if (val >= localCutoff && val > 0) {
+        const w = Math.pow(val - localCutoff + 1, 2);
+        localWeightedCol += c * w;
+        localWeightedRow += r * w;
+        localWeight += w;
+      }
+    }
+  }
+
+  const centerCol = (localWeight > 0) ? (localWeightedCol / localWeight) : peakCol;
+  const centerRow = (localWeight > 0) ? (localWeightedRow / localWeight) : peakRow;
 
   // Physical coordinates:
   // X: 0 cm to 800 cm across detector columns (Column 0 = 0 cm, Column numCols - 1 = 800 cm)
@@ -2422,7 +2458,10 @@ function toggleLoopSelection(loopNum, isChecked) {
   } else {
     APP_STATE.selectedLoops.delete(loopNum);
   }
+  recompute3DSourceLocalization();
   renderMatrixHeatmap();
+  render3DSourceViewport();
+  renderTopViewXZ();
   updateRawTable();
 }
 
@@ -2436,7 +2475,10 @@ function selectAllLoops(shouldSelect) {
     if (shouldSelect) APP_STATE.selectedLoops.add(loopNum);
     else APP_STATE.selectedLoops.delete(loopNum);
   });
+  recompute3DSourceLocalization();
   renderMatrixHeatmap();
+  render3DSourceViewport();
+  renderTopViewXZ();
   updateRawTable();
 }
 
