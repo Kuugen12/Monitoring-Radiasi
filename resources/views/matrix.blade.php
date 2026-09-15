@@ -307,8 +307,8 @@
         <!-- 3D Source Position Estimator -->
         <div class="hud-spatial-card">
           <div class="spatial-head">
-            <span>3D Source Localization</span>
-            <span class="badge-live">Isometric Model</span>
+            <span>3D SOURCE POSITION</span>
+            <span class="badge-live">ISOMETRIC MODEL</span>
           </div>
           <div class="canvas-spatial-stage" id="container3D">
             <canvas id="canvas3D" width="500" height="220"></canvas>
@@ -1282,9 +1282,7 @@ function renderContourView(width, height) {
 
   ctx.putImageData(imgData, 0, 0);
 
-  // Position of hotspot centroid / peak on contour plane:
-  // Column 0 is at px = 0, Column (numCols - 1) is at px = width.
-  // Row 0 (Blok 1, top) is at py = 0, Row (numRows - 1) (Bottom Blok) is at py = height.
+  // Position of hotspot centroid / peak on contour plane matching Top View & TiDB data
   let centerCol = 0;
   let centerRow = 0;
   if (APP_STATE.estimatedSource && APP_STATE.estimatedSource.centerCol !== undefined) {
@@ -1295,8 +1293,10 @@ function renderContourView(width, height) {
     centerRow = (APP_STATE.estimatedSource.z / 35) - 1;
   }
 
-  const cx = numCols > 1 ? (centerCol / (numCols - 1)) * width : width / 2;
-  const cy = numRows > 1 ? (centerRow / (numRows - 1)) * height : height / 2;
+  const normC = numCols > 1 ? (Math.max(0, Math.min(numCols - 1, centerCol)) / (numCols - 1)) : 0.5;
+  const normR = numRows > 1 ? (Math.max(0, Math.min(numRows - 1, centerRow)) / (numRows - 1)) : 0.5;
+  const cx = normC * width;
+  const cy = normR * height;
 
   // Draw glowing red hotspot locator target
   ctx.save();
@@ -1466,115 +1466,313 @@ function render8x9GridView(width, height) {
   ctx.textAlign = 'left';
 }
 
-// 8. 3D ISOMETRIC SOURCE LOCALIZATION
+// 8. 3D SOURCE POSITION VIEWPORT — Matching Gambar 3 (3D Isometric Grid, Axes & Shaded Sphere)
 function render3DSourceViewport() {
   const canvas3D = document.getElementById('canvas3D');
   if (!canvas3D) return;
   const ctx3D = canvas3D.getContext('2d');
-  const w = canvas3D.width;
-  const h = canvas3D.height;
   const isLight = isLightMode();
 
+  // HiDPI / Retina Canvas Scaling
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas3D.getBoundingClientRect();
+  const displayW = rect.width || 500;
+  const displayH = 220;
+  if (canvas3D.width !== Math.round(displayW * dpr) || canvas3D.height !== Math.round(displayH * dpr)) {
+    canvas3D.width = Math.round(displayW * dpr);
+    canvas3D.height = Math.round(displayH * dpr);
+  }
+  ctx3D.resetTransform();
+  ctx3D.scale(dpr, dpr);
+  const w = displayW;
+  const h = displayH;
+
   ctx3D.clearRect(0, 0, w, h);
-  ctx3D.fillStyle = isLight ? '#f8fafc' : '#03060E';
+  // Dark 3D navy viewport background matching Gambar 3
+  ctx3D.fillStyle = isLight ? '#f8fafc' : '#040714';
   ctx3D.fillRect(0, 0, w, h);
 
-  const originX = w * 0.28;
-  const originY = h * 0.72;
-  const scale = 0.26;
+  // Dynamic max Z based on total height levels from TiDB
+  const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 10);
+  const maxZ = Math.max(350, numRows * 35);
+  const maxZAxis = Math.ceil(maxZ / 100) * 100; // e.g. 400 cm
+
+  // 3D Isometric Projection Parameters (tuned to match Gambar 3)
+  const originX = 85;
+  const originY = 175;
+  const axisX_dx = 225, axisX_dy = 30;    // X goes right and slightly down
+  const axisY_dx = 145, axisY_dy = -35;   // Y goes right and up (depth)
+  const axisZ_dy = -125;                  // Z goes straight up
+
+  const yMin = -200, yMax = 20;
 
   function project3D(x, y, z) {
-    const isoX = originX + (x * 0.7 - y * 0.7) * scale;
-    const isoY = originY + (x * 0.2 + y * 0.2 - z * 0.8) * scale;
-    return { px: isoX, py: isoY };
+    const normX = Math.max(0, Math.min(1, x / 800.0));
+    const normY = Math.max(0, Math.min(1, (y - yMin) / (yMax - yMin)));
+    const normZ = Math.max(0, Math.min(1, z / maxZAxis));
+
+    const px = originX + normX * axisX_dx + normY * axisY_dx;
+    const py = originY + normX * axisX_dy + normY * axisY_dy + normZ * axisZ_dy;
+    return { px, py };
   }
 
-  // Dynamic max Z in 3D viewport
-  const maxZ3D = Math.max(350, (APP_STATE.totalHeights || 10) * 35);
+  // 1. Draw Floor Grid Plane (Z = 0)
+  const fl_c0 = project3D(0, yMin, 0);
+  const fl_c1 = project3D(800, yMin, 0);
+  const fl_c2 = project3D(800, yMax, 0);
+  const fl_c3 = project3D(0, yMax, 0);
 
-  // 3D Bounding Cube Wireframe
-  ctx3D.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.35)' : 'rgba(59, 130, 246, 0.25)';
-  ctx3D.lineWidth = 1;
-
-  const corners = [
-    project3D(0, -100, 0), project3D(800, -100, 0), project3D(800, 100, 0), project3D(0, 100, 0),
-    project3D(0, -100, maxZ3D), project3D(800, -100, maxZ3D), project3D(800, 100, maxZ3D), project3D(0, 100, maxZ3D)
-  ];
-
+  ctx3D.fillStyle = isLight ? 'rgba(226, 232, 240, 0.5)' : 'rgba(15, 23, 42, 0.55)';
   ctx3D.beginPath();
-  ctx3D.moveTo(corners[0].px, corners[0].py);
-  ctx3D.lineTo(corners[1].px, corners[1].py);
-  ctx3D.lineTo(corners[2].px, corners[2].py);
-  ctx3D.lineTo(corners[3].px, corners[3].py);
+  ctx3D.moveTo(fl_c0.px, fl_c0.py);
+  ctx3D.lineTo(fl_c1.px, fl_c1.py);
+  ctx3D.lineTo(fl_c2.px, fl_c2.py);
+  ctx3D.lineTo(fl_c3.px, fl_c3.py);
   ctx3D.closePath();
-  ctx3D.stroke();
+  ctx3D.fill();
 
-  for (let i = 0; i < 4; i++) {
+  // Floor grid lines
+  ctx3D.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.4)' : 'rgba(59, 130, 246, 0.18)';
+  ctx3D.lineWidth = 0.8;
+  for (let gx = 200; gx < 800; gx += 200) {
+    const pStart = project3D(gx, yMin, 0);
+    const pEnd = project3D(gx, yMax, 0);
     ctx3D.beginPath();
-    ctx3D.moveTo(corners[i].px, corners[i].py);
-    ctx3D.lineTo(corners[i + 4].px, corners[i + 4].py);
+    ctx3D.moveTo(pStart.px, pStart.py);
+    ctx3D.lineTo(pEnd.px, pEnd.py);
+    ctx3D.stroke();
+  }
+  for (let gy = -150; gy < yMax; gy += 50) {
+    const pStart = project3D(0, gy, 0);
+    const pEnd = project3D(800, gy, 0);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pStart.px, pStart.py);
+    ctx3D.lineTo(pEnd.px, pEnd.py);
     ctx3D.stroke();
   }
 
+  // 2. Draw Back Wall Grid Plane (Y = yMax)
+  const bw_c0 = project3D(0, yMax, 0);
+  const bw_c1 = project3D(800, yMax, 0);
+  const bw_c2 = project3D(800, yMax, maxZAxis);
+  const bw_c3 = project3D(0, yMax, maxZAxis);
+
+  ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.35)' : 'rgba(11, 19, 43, 0.35)';
   ctx3D.beginPath();
-  ctx3D.moveTo(corners[4].px, corners[4].py);
-  ctx3D.lineTo(corners[5].px, corners[5].py);
-  ctx3D.lineTo(corners[6].px, corners[6].py);
-  ctx3D.lineTo(corners[7].px, corners[7].py);
+  ctx3D.moveTo(bw_c0.px, bw_c0.py);
+  ctx3D.lineTo(bw_c1.px, bw_c1.py);
+  ctx3D.lineTo(bw_c2.px, bw_c2.py);
+  ctx3D.lineTo(bw_c3.px, bw_c3.py);
   ctx3D.closePath();
-  ctx3D.stroke();
+  ctx3D.fill();
 
-  ctx3D.fillStyle = isLight ? '#475569' : '#64748B';
-  ctx3D.font = '9px "IBM Plex Mono"';
-  const pXLabel = project3D(820, 0, 0);
-  ctx3D.fillText("X: 800cm", pXLabel.px, pXLabel.py);
-  const pZLabel = project3D(0, 0, maxZ3D + 20);
-  ctx3D.fillText(`Z: ${maxZ3D}cm`, pZLabel.px, pZLabel.py);
+  for (let gx = 200; gx < 800; gx += 200) {
+    const pStart = project3D(gx, yMax, 0);
+    const pEnd = project3D(gx, yMax, maxZAxis);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pStart.px, pStart.py);
+    ctx3D.lineTo(pEnd.px, pEnd.py);
+    ctx3D.stroke();
+  }
+  for (let gz = 100; gz < maxZAxis; gz += 100) {
+    const pStart = project3D(0, yMax, gz);
+    const pEnd = project3D(800, yMax, gz);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pStart.px, pStart.py);
+    ctx3D.lineTo(pEnd.px, pEnd.py);
+    ctx3D.stroke();
+  }
 
-  // Active Linear Array Bar
-  const curH = Math.max(1, APP_STATE.currentHeight || 1);
-  const dStart = project3D(0, 0, curH * 35);
-  const dEnd = project3D(800, 0, curH * 35);
-  ctx3D.strokeStyle = isLight ? '#059669' : '#34D399';
-  ctx3D.lineWidth = 2.5;
+  // 3. Draw Left Wall Grid Plane (X = 0)
+  const lw_c0 = project3D(0, yMin, 0);
+  const lw_c1 = project3D(0, yMax, 0);
+  const lw_c2 = project3D(0, yMax, maxZAxis);
+  const lw_c3 = project3D(0, yMin, maxZAxis);
+
+  ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.45)' : 'rgba(15, 23, 42, 0.4)';
   ctx3D.beginPath();
-  ctx3D.moveTo(dStart.px, dStart.py);
-  ctx3D.lineTo(dEnd.px, dEnd.py);
+  ctx3D.moveTo(lw_c0.px, lw_c0.py);
+  ctx3D.lineTo(lw_c1.px, lw_c1.py);
+  ctx3D.lineTo(lw_c2.px, lw_c2.py);
+  ctx3D.lineTo(lw_c3.px, lw_c3.py);
+  ctx3D.closePath();
+  ctx3D.fill();
+
+  for (let gy = -150; gy < yMax; gy += 50) {
+    const pStart = project3D(0, gy, 0);
+    const pEnd = project3D(0, gy, maxZAxis);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pStart.px, pStart.py);
+    ctx3D.lineTo(pEnd.px, pEnd.py);
+    ctx3D.stroke();
+  }
+  for (let gz = 100; gz < maxZAxis; gz += 100) {
+    const pStart = project3D(0, yMin, gz);
+    const pEnd = project3D(0, yMax, gz);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pStart.px, pStart.py);
+    ctx3D.lineTo(pEnd.px, pEnd.py);
+    ctx3D.stroke();
+  }
+
+  // 4. Primary 3D Axes Lines & Ticks (matching Gambar 3)
+  ctx3D.strokeStyle = isLight ? 'rgba(51, 65, 85, 0.75)' : 'rgba(147, 197, 253, 0.6)';
+  ctx3D.lineWidth = 1.3;
+
+  // Z Axis
+  ctx3D.beginPath();
+  ctx3D.moveTo(lw_c0.px, lw_c0.py);
+  ctx3D.lineTo(lw_c3.px, lw_c3.py);
   ctx3D.stroke();
 
-  // Estimated Source Sphere
-  const src = APP_STATE.estimatedSource || { x: 400, y: -30, z: 175 };
-  const pSrc = project3D(src.x, src.y, src.z);
-  const pBase = project3D(src.x, src.y, 0);
+  // X Axis
+  ctx3D.beginPath();
+  ctx3D.moveTo(fl_c0.px, fl_c0.py);
+  ctx3D.lineTo(fl_c1.px, fl_c1.py);
+  ctx3D.stroke();
 
-  ctx3D.strokeStyle = 'rgba(239, 68, 68, 0.4)';
-  ctx3D.setLineDash([2, 2]);
+  // Y Axis
+  ctx3D.beginPath();
+  ctx3D.moveTo(fl_c1.px, fl_c1.py);
+  ctx3D.lineTo(fl_c2.px, fl_c2.py);
+  ctx3D.stroke();
+
+  // Top / back box boundary lines
+  ctx3D.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.4)' : 'rgba(59, 130, 246, 0.25)';
+  ctx3D.lineWidth = 0.8;
+  ctx3D.beginPath();
+  ctx3D.moveTo(bw_c3.px, bw_c3.py);
+  ctx3D.lineTo(bw_c2.px, bw_c2.py);
+  ctx3D.lineTo(fl_c2.px, fl_c2.py);
+  ctx3D.moveTo(lw_c3.px, lw_c3.py);
+  ctx3D.lineTo(bw_c3.px, bw_c3.py);
+  ctx3D.stroke();
+
+  // Axis Labels & Ticks Text
+  ctx3D.fillStyle = isLight ? '#475569' : '#94A3B8';
+  ctx3D.font = '700 8.5px "IBM Plex Mono", monospace';
+  ctx3D.textAlign = 'right';
+
+  // Z-Axis Ticks: 0, 100, 200, 300, 400
+  for (let gz = 0; gz <= maxZAxis; gz += 100) {
+    const pt = project3D(0, yMin, gz);
+    ctx3D.fillText(`${gz}`, pt.px - 6, pt.py + 3);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pt.px - 3, pt.py);
+    ctx3D.lineTo(pt.px, pt.py);
+    ctx3D.stroke();
+  }
+
+  // Z-Axis Title (rotated)
+  ctx3D.save();
+  const zMid = project3D(0, yMin, maxZAxis / 2);
+  ctx3D.translate(zMid.px - 26, zMid.py);
+  ctx3D.rotate(-Math.PI / 2);
+  ctx3D.textAlign = 'center';
+  ctx3D.font = '700 9px "IBM Plex Mono", monospace';
+  ctx3D.fillText('Z (cm)', 0, 0);
+  ctx3D.restore();
+
+  // X-Axis Ticks: 0, 200, 400, 800
+  ctx3D.textAlign = 'center';
+  ctx3D.font = '700 8.5px "IBM Plex Mono", monospace';
+  const xTicks = [0, 200, 400, 800];
+  xTicks.forEach(gx => {
+    const pt = project3D(gx, yMin, 0);
+    ctx3D.fillText(`${gx}`, pt.px, pt.py + 13);
+    ctx3D.beginPath();
+    ctx3D.moveTo(pt.px, pt.py);
+    ctx3D.lineTo(pt.px, pt.py + 3);
+    ctx3D.stroke();
+  });
+
+  // X-Axis Title
+  const xMid = project3D(400, yMin, 0);
+  ctx3D.fillText('X (cm)', xMid.px, xMid.py + 25);
+
+  // Y-Axis Ticks: -200, 0, 20
+  ctx3D.textAlign = 'left';
+  const yTicks = [-200, 0, 20];
+  yTicks.forEach(gy => {
+    const pt = project3D(800, gy, 0);
+    ctx3D.fillText(`${gy}`, pt.px + 6, pt.py + 3);
+  });
+
+  // Y-Axis Title
+  const yMid = project3D(800, -80, 0);
+  ctx3D.fillText('Y (cm)', yMid.px + 14, yMid.py + 14);
+
+  // 5. Active Elevator Scanning Bar at Current Height Step
+  const curH = Math.max(1, APP_STATE.currentHeight || numRows);
+  const curZ = curH * 35;
+  const barStart = project3D(0, 0, curZ);
+  const barEnd = project3D(800, 0, curZ);
+  ctx3D.strokeStyle = isLight ? 'rgba(5, 150, 105, 0.7)' : 'rgba(52, 211, 153, 0.65)';
+  ctx3D.lineWidth = 2;
+  ctx3D.beginPath();
+  ctx3D.moveTo(barStart.px, barStart.py);
+  ctx3D.lineTo(barEnd.px, barEnd.py);
+  ctx3D.stroke();
+
+  // 6. Estimated Source Position 3D Sphere (Matching Gambar 3!)
+  const src = APP_STATE.estimatedSource || { x: 412.5, y: -30.0, z: 105.0 };
+  const estX = Number(src.x) || 400;
+  const estY = Number(src.y) || -30;
+  const estZ = Number(src.z) || 105;
+
+  const pSrc = project3D(estX, estY, estZ);
+  const pBase = project3D(estX, estY, 0);
+
+  // Vertical drop projection dashed line to floor
+  ctx3D.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+  ctx3D.lineWidth = 1.2;
+  ctx3D.setLineDash([3, 3]);
   ctx3D.beginPath();
   ctx3D.moveTo(pSrc.px, pSrc.py);
   ctx3D.lineTo(pBase.px, pBase.py);
   ctx3D.stroke();
   ctx3D.setLineDash([]);
 
-  ctx3D.fillStyle = 'rgba(239, 68, 68, 0.2)';
+  // Floor drop shadow ellipse
+  ctx3D.fillStyle = 'rgba(239, 68, 68, 0.22)';
   ctx3D.beginPath();
-  ctx3D.ellipse(pBase.px, pBase.py, 10, 4, 0, 0, Math.PI * 2);
+  ctx3D.ellipse(pBase.px, pBase.py, 12, 5, 0, 0, Math.PI * 2);
   ctx3D.fill();
 
-  const radialGlow = ctx3D.createRadialGradient(pSrc.px, pSrc.py, 2, pSrc.px, pSrc.py, 16);
-  radialGlow.addColorStop(0, '#EF4444');
-  radialGlow.addColorStop(0.5, 'rgba(239, 68, 68, 0.4)');
-  radialGlow.addColorStop(1, 'rgba(239, 68, 68, 0)');
-  ctx3D.fillStyle = radialGlow;
+  // Soft ambient radiation glow aura
+  const radius = 14;
+  const auraGlow = ctx3D.createRadialGradient(pSrc.px, pSrc.py, 2, pSrc.px, pSrc.py, radius * 2.2);
+  auraGlow.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
+  auraGlow.addColorStop(0.5, 'rgba(245, 158, 11, 0.15)');
+  auraGlow.addColorStop(1, 'rgba(239, 68, 68, 0)');
+  ctx3D.fillStyle = auraGlow;
   ctx3D.beginPath();
-  ctx3D.arc(pSrc.px, pSrc.py, 16, 0, Math.PI * 2);
+  ctx3D.arc(pSrc.px, pSrc.py, radius * 2.2, 0, Math.PI * 2);
   ctx3D.fill();
 
-  ctx3D.fillStyle = '#EF4444';
+  // Render Realistic 3D Shaded Sphere (matching Gambar 3 specular highlight)
+  const sphereGrad = ctx3D.createRadialGradient(
+    pSrc.px - radius * 0.35,
+    pSrc.py - radius * 0.35,
+    radius * 0.08,
+    pSrc.px,
+    pSrc.py,
+    radius
+  );
+  sphereGrad.addColorStop(0.0, '#FFFFFF'); // Specular highlight glint
+  sphereGrad.addColorStop(0.2, '#FFA4A4'); // Soft bright highlight
+  sphereGrad.addColorStop(0.5, '#EF4444'); // Core red
+  sphereGrad.addColorStop(0.8, '#991B1B'); // Shaded deep red
+  sphereGrad.addColorStop(1.0, '#450A0A'); // Shadowed bottom rim
+
+  ctx3D.fillStyle = sphereGrad;
   ctx3D.beginPath();
-  ctx3D.arc(pSrc.px, pSrc.py, 5.5, 0, Math.PI * 2);
+  ctx3D.arc(pSrc.px, pSrc.py, radius, 0, Math.PI * 2);
   ctx3D.fill();
-  ctx3D.strokeStyle = '#FFFFFF';
-  ctx3D.lineWidth = 1.5;
+
+  // Subtle outer edge stroke
+  ctx3D.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx3D.lineWidth = 1;
   ctx3D.stroke();
 }
 
