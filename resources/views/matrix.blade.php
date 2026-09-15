@@ -1497,10 +1497,10 @@ function render3DSourceViewport() {
   const maxZAxis = Math.max(25.0, numRows * 5.0); // e.g. 25 cm for 5 rows
 
   // 3D Isometric Projection Parameters (tuned to match Gambar 3 with 60x25x25 cm box)
-  const originX = 85;
+  const originX = 90;
   const originY = 175;
-  const axisX_dx = 225, axisX_dy = 30;    // X goes right and slightly down (0 to 60 cm)
-  const axisY_dx = 145, axisY_dy = -35;   // Y goes right and up (depth: -25 to 0 cm)
+  const axisX_dx = 220, axisX_dy = 30;    // X goes right and slightly down (0 to 60 cm)
+  const axisY_dx = 140, axisY_dy = -35;   // Y goes right and up (depth: -25 to 0 cm)
   const axisZ_dy = -125;                  // Z goes straight up (0 to 25 cm)
 
   const yMin = -25.0, yMax = 0.0;
@@ -1665,7 +1665,7 @@ function render3DSourceViewport() {
   // Z-Axis Title (rotated)
   ctx3D.save();
   const zMid = project3D(0, yMin, maxZAxis / 2);
-  ctx3D.translate(zMid.px - 26, zMid.py);
+  ctx3D.translate(zMid.px - 30, zMid.py);
   ctx3D.rotate(-Math.PI / 2);
   ctx3D.textAlign = 'center';
   ctx3D.font = '700 9px "IBM Plex Mono", monospace';
@@ -1800,10 +1800,10 @@ function renderTopViewXZ() {
   ctxTop.fillStyle = isLight ? '#f8fafc' : '#03060E';
   ctxTop.fillRect(0, 0, w, h);
 
-  const padL = 52;
-  const padR = 18;
-  const padT = 24;
-  const padB = 30;
+  const padL = 76;
+  const padR = 20;
+  const padT = 26;
+  const padB = 34;
   const plotX = padL;
   const plotY = padT;
   const plotW = w - padL - padR;
@@ -1917,42 +1917,45 @@ function renderTopViewXZ() {
   const m2End = Math.min(chPerMod * 2, numCols);
   const m3End = numCols;
 
-  ctxTop.fillText(`XS1 (D01-D${m1End < 10 ? '0' + m1End : m1End})`, plotX + (m1End * cellW) / 2, plotY - 8);
+  ctxTop.fillText(`XS1 (D01-D${m1End < 10 ? '0' + m1End : m1End})`, plotX + (m1End * cellW) / 2, plotY - 9);
   if (m2End > m1End) {
-    ctxTop.fillText(`XS2 (D${(m1End + 1) < 10 ? '0' + (m1End + 1) : (m1End + 1)}-D${m2End < 10 ? '0' + m2End : m2End})`, plotX + ((m1End + m2End) * cellW) / 2, plotY - 8);
+    ctxTop.fillText(`XS2 (D${(m1End + 1) < 10 ? '0' + (m1End + 1) : (m1End + 1)}-D${m2End < 10 ? '0' + m2End : m2End})`, plotX + ((m1End + m2End) * cellW) / 2, plotY - 9);
   }
   if (m3End > m2End) {
-    ctxTop.fillText(`XS3 (D${(m2End + 1) < 10 ? '0' + (m2End + 1) : (m2End + 1)}-D${m3End < 10 ? '0' + m3End : m3End})`, plotX + ((m2End + m3End) * cellW) / 2, plotY - 8);
+    ctxTop.fillText(`XS3 (D${(m2End + 1) < 10 ? '0' + (m2End + 1) : (m2End + 1)}-D${m3End < 10 ? '0' + m3End : m3End})`, plotX + ((m2End + m3End) * cellW) / 2, plotY - 9);
   }
 
   // Axis Labels & Ticks
   ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
-  ctxTop.font = '8px "IBM Plex Mono", monospace';
+  ctxTop.font = '700 8.5px "IBM Plex Mono", monospace';
   ctxTop.textAlign = 'center';
-  ctxTop.fillText('X · Detector Channel Array (0 – 60 cm)', plotX + plotW / 2, h - 8);
+  ctxTop.fillText('X · Detector Channel Array (0 – 60 cm)', plotX + plotW / 2, h - 6);
 
   // X Axis distance ticks
+  ctxTop.font = '700 8px "IBM Plex Mono", monospace';
   ctxTop.textAlign = 'center';
-  ctxTop.fillText('0 cm', plotX, plotY + plotH + 12);
-  ctxTop.fillText('20 cm', plotX + plotW / 3, plotY + plotH + 12);
-  ctxTop.fillText('40 cm', plotX + (2 * plotW) / 3, plotY + plotH + 12);
-  ctxTop.fillText('60 cm', plotX + plotW, plotY + plotH + 12);
+  ctxTop.fillText('0 cm', plotX, plotY + plotH + 13);
+  ctxTop.fillText('20 cm', plotX + plotW / 3, plotY + plotH + 13);
+  ctxTop.fillText('40 cm', plotX + (2 * plotW) / 3, plotY + plotH + 13);
+  ctxTop.fillText('60 cm', plotX + plotW, plotY + plotH + 13);
 
   // Z Axis labels at left (Blok / Height)
   ctxTop.save();
-  ctxTop.translate(12, plotY + plotH / 2);
+  ctxTop.translate(14, plotY + plotH / 2);
   ctxTop.rotate(-Math.PI / 2);
   ctxTop.textAlign = 'center';
+  ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
+  ctxTop.font = '700 8.5px "IBM Plex Mono", monospace';
   ctxTop.fillText('Z · Elevation (cm)', 0, 0);
   ctxTop.restore();
 
   ctxTop.textAlign = 'right';
-  ctxTop.font = '7.5px "IBM Plex Mono", monospace';
+  ctxTop.font = '700 8px "IBM Plex Mono", monospace';
   for (let r = 0; r < numRows; r++) {
     const yCenter = plotY + (r + 0.5) * cellH;
     const bNum = r + 1;
     const zVal = heightZCm(r);
-    ctxTop.fillText(`B${bNum < 10 ? '0' + bNum : bNum} (${zVal}cm)`, plotX - 5, yCenter + 2.5);
+    ctxTop.fillText(`B${bNum < 10 ? '0' + bNum : bNum} (${zVal}cm)`, plotX - 6, yCenter + 2.5);
   }
 
   // Estimated Source Position from Bayesian Localization
@@ -2075,7 +2078,7 @@ if (canvasTopEl) {
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    const padL = 52, padR = 18, padT = 24, padB = 30;
+    const padL = 76, padR = 20, padT = 26, padB = 34;
     const plotW = (canvasTopEl.width / dpr) - padL - padR;
     const plotH = (canvasTopEl.height / dpr) - padT - padB;
 
