@@ -242,13 +242,6 @@
 
       <!-- Centerpiece: 2D Dynamic Heatmap Card -->
       <div class="heatmap-stage-card" id="heatmapMainCard">
-        <!-- Module Zone Markers -->
-        <div class="module-marker-strip">
-          <div class="mod-marker xs1">XS1 (S1): D01 &ndash; D12</div>
-          <div class="mod-marker xs2">XS2 (S2): D13 &ndash; D24</div>
-          <div class="mod-marker xs3">XS3 (S3): D25 &ndash; D36</div>
-        </div>
-
         <!-- Heatmap Canvas Stage -->
         <div class="canvas-viewport-wrapper" id="canvasContainer">
           <canvas id="matrixHeatmapCanvas" width="1100" height="400"></canvas>
@@ -341,7 +334,7 @@
             <div class="matrix-tooltip" id="topViewTooltip" style="display:none;position:absolute;pointer-events:none;z-index:50;">
               <div class="tt-head">
                 <span class="tt-det-title" id="tvtChannel">Detector D06</span>
-                <span class="tt-mod-tag" id="tvtModule">XS2 (S2)</span>
+                <span class="tt-mod-tag" id="tvtModule">XS3 (S3)</span>
               </div>
               <div class="tt-grid-info">
                 <div class="tt-stat-row">
@@ -378,7 +371,7 @@
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">PEAK DETECTOR</div>
-              <div class="h-val alert" id="statHotspotCount">XS2 (D38)</div>
+              <div class="h-val alert" id="statHotspotCount">XS3 (D06)</div>
             </div>
           </div>
         </div>
@@ -401,7 +394,7 @@
         <div class="kpi-tile kpi-peak">
           <div class="kpi-header">Peak Intensity</div>
           <div class="kpi-number" id="metricMaxCps">3245 <span class="kpi-unit">cps</span></div>
-          <div class="kpi-subtext" id="metricMaxChannel">Detector D43 (XS2)</div>
+          <div class="kpi-subtext" id="metricMaxChannel">Detector D06 (XS3)</div>
         </div>
 
         <div class="kpi-tile kpi-avg">
@@ -734,21 +727,22 @@ function getColorForValue(val, maxVal = null, palette = APP_STATE.currentPalette
   }
 }
 
-function updateModuleMarkers(numCols = 72) {
-  const markerStrip = document.querySelector('.module-marker-strip');
-  if (!markerStrip) return;
-  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
-  const m1End = Math.min(chPerMod, numCols);
-  const m2Start = m1End + 1;
-  const m2End = Math.min(chPerMod * 2, numCols);
-  const m3Start = m2End + 1;
-  const m3End = numCols;
+function getDetectorModuleName(detNumber, withAlias = false) {
+  const modIdx = ((detNumber - 1) % 3);
+  if (modIdx === 0) return withAlias ? 'XS1 (S1)' : 'XS1';
+  if (modIdx === 1) return withAlias ? 'XS2 (S2)' : 'XS2';
+  return withAlias ? 'XS3 (S3)' : 'XS3';
+}
 
-  markerStrip.innerHTML = `
-    <div class="mod-marker xs1">XS1 (S1): D01 &ndash; D${m1End < 10 ? '0' + m1End : m1End}</div>
-    <div class="mod-marker xs2">XS2 (S2): D${m2Start < 10 ? '0' + m2Start : m2Start} &ndash; D${m2End < 10 ? '0' + m2End : m2End}</div>
-    <div class="mod-marker xs3">XS3 (S3): D${m3Start < 10 ? '0' + m3Start : m3Start} &ndash; D${m3End < 10 ? '0' + m3End : m3End}</div>
-  `;
+function getColumnModuleName(colIndex, withAlias = false) {
+  const modIdx = (colIndex % 3);
+  if (modIdx === 0) return withAlias ? 'XS1 (S1)' : 'XS1';
+  if (modIdx === 1) return withAlias ? 'XS2 (S2)' : 'XS2';
+  return withAlias ? 'XS3 (S3)' : 'XS3';
+}
+
+function updateModuleMarkers(numCols = 72) {
+  // Module strip removed from UI per interleaved scanning pattern
 }
 
 function updateColorbarGradient() {
@@ -1064,10 +1058,7 @@ function recompute3DSourceLocalization() {
   if (sMethod) sMethod.textContent = 'Bayesian';
 
   const peakDetectorNumber = peakCol + 1;
-  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
-  let modLabel = 'XS1';
-  if (peakDetectorNumber > chPerMod && peakDetectorNumber <= chPerMod * 2) modLabel = 'XS2';
-  else if (peakDetectorNumber > chPerMod * 2) modLabel = 'XS3';
+  const modLabel = getColumnModuleName(peakCol);
 
   const sHs = document.getElementById('statHotspotCount');
   if (sHs) sHs.textContent = `${modLabel} (D${peakDetectorNumber < 10 ? '0' + peakDetectorNumber : peakDetectorNumber})`;
@@ -1167,26 +1158,7 @@ function renderMatrixHeatmap() {
     ctx.fillText(`Blok ${blokNum < 10 ? '0' + blokNum : blokNum}`, 6, r * cellH + cellH / 2 + 3);
   }
 
-  // Vertical Module Boundaries (Divided dynamically by 3 modules)
-  if (numCols >= 3) {
-    const chPerMod = Math.ceil(numCols / 3);
-    const xDivider1 = chPerMod * cellW;
-    const xDivider2 = (chPerMod * 2) * cellW;
 
-    ctx.setLineDash([4, 4]);
-    ctx.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.25)' : 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 1.5;
-    
-    ctx.beginPath();
-    ctx.moveTo(xDivider1, 0);
-    ctx.lineTo(xDivider1, height);
-    if (chPerMod * 2 < numCols) {
-      ctx.moveTo(xDivider2, 0);
-      ctx.lineTo(xDivider2, height);
-    }
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
 
   // Hover Crosshairs
   if (hoveredCell && hoveredCell.row < numRows && hoveredCell.col < numCols) {
@@ -1417,9 +1389,7 @@ function render8x9GridView(width, height) {
       const peakVal = detectorPeaks[detIndex] || 0;
       const isHotspot = avgVal >= APP_STATE.hotspotThreshold || (peakVal >= APP_STATE.hotspotThreshold && peakVal > 0);
 
-      let modLabel = 'XS1';
-      if (detIndex + 1 > chPerMod && detIndex + 1 <= chPerMod * 2) modLabel = 'XS2';
-      else if (detIndex + 1 > chPerMod * 2) modLabel = 'XS3';
+      const modLabel = getDetectorModuleName(detIndex + 1);
 
       if (selectedCount > 0) {
         ctx.fillStyle = getColorForValue(avgVal, dynamicMax);
@@ -1890,40 +1860,10 @@ function renderTopViewXZ() {
   }
   ctxTop.globalAlpha = 1;
 
-  // Module Zone Boundaries & Division Lines (XS1 / XS2 / XS3)
-  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
-  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.4)' : 'rgba(147, 197, 253, 0.4)';
-  ctxTop.lineWidth = 1.2;
-  ctxTop.setLineDash([4, 3]);
-  for (let m = 1; m < 3; m++) {
-    const mx = plotX + Math.min(numCols, m * chPerMod) * cellW;
-    ctxTop.beginPath();
-    ctxTop.moveTo(mx, plotY);
-    ctxTop.lineTo(mx, plotY + plotH);
-    ctxTop.stroke();
-  }
-  ctxTop.setLineDash([]);
-
   // Plot Stage Border
   ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.5)' : 'rgba(59, 130, 246, 0.55)';
   ctxTop.lineWidth = 1.2;
   ctxTop.strokeRect(plotX, plotY, plotW, plotH);
-
-  // Module Header Badges at top
-  ctxTop.fillStyle = isLight ? '#475569' : '#94A3B8';
-  ctxTop.font = '700 8.5px "IBM Plex Mono", monospace';
-  ctxTop.textAlign = 'center';
-  const m1End = Math.min(chPerMod, numCols);
-  const m2End = Math.min(chPerMod * 2, numCols);
-  const m3End = numCols;
-
-  ctxTop.fillText(`XS1 (D01-D${m1End < 10 ? '0' + m1End : m1End})`, plotX + (m1End * cellW) / 2, plotY - 9);
-  if (m2End > m1End) {
-    ctxTop.fillText(`XS2 (D${(m1End + 1) < 10 ? '0' + (m1End + 1) : (m1End + 1)}-D${m2End < 10 ? '0' + m2End : m2End})`, plotX + ((m1End + m2End) * cellW) / 2, plotY - 9);
-  }
-  if (m3End > m2End) {
-    ctxTop.fillText(`XS3 (D${(m2End + 1) < 10 ? '0' + (m2End + 1) : (m2End + 1)}-D${m3End < 10 ? '0' + m3End : m3End})`, plotX + ((m2End + m3End) * cellW) / 2, plotY - 9);
-  }
 
   // Axis Labels & Ticks
   ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
@@ -2099,10 +2039,7 @@ if (canvasTopEl) {
     const r = Math.max(0, Math.min(numRows - 1, Math.floor((mouseY - padT) / cellH)));
 
     const detNum = c + 1;
-    const chPerMod = Math.max(1, Math.ceil(numCols / 3));
-    let modName = 'XS1 (S1)';
-    if (detNum > chPerMod && detNum <= chPerMod * 2) modName = 'XS2 (S2)';
-    else if (detNum > chPerMod * 2) modName = 'XS3 (S3)';
+    const modName = getDetectorModuleName(detNum, true);
 
     const blokNum = r + 1;
     const xCm = detectorXCm(c, numCols).toFixed(1);
@@ -2244,10 +2181,7 @@ canvas.addEventListener('mousemove', (e) => {
 
     const tooltip = document.getElementById('matrixTooltip');
     const detNumber = col + 1;
-    const chPerMod = Math.max(1, Math.ceil(numCols / 3));
-    let modName = "XS1 (S1)";
-    if (col >= chPerMod && col < chPerMod * 2) modName = "XS2 (S2)";
-    if (col >= chPerMod * 2) modName = "XS3 (S3)";
+    const modName = getColumnModuleName(col, true);
 
     const actualRowIndex = row;
     const blokNum = actualRowIndex + 1;
@@ -2293,13 +2227,11 @@ function buildIndividualChannelsGrid() {
   if (!container) return;
   container.innerHTML = '';
   const totalCh = APP_STATE.totalChannels || 72;
-  const chPerMod = Math.max(1, Math.ceil(totalCh / 3));
 
   for (let i = 1; i <= totalCh; i++) {
     const chip = document.createElement('div');
-    let modClass = 'xs1';
-    if (i > chPerMod && i <= chPerMod * 2) modClass = 'xs2';
-    if (i > chPerMod * 2) modClass = 'xs3';
+    const modIdx = ((i - 1) % 3);
+    const modClass = modIdx === 0 ? 'xs1' : (modIdx === 1 ? 'xs2' : 'xs3');
 
     chip.className = `channel-readout-chip ${modClass}`;
     chip.id = `channelChip-${i}`;
@@ -2316,13 +2248,13 @@ function buildDetectorDotsGrid() {
   if (!grid) return;
   grid.innerHTML = '';
   const totalCh = APP_STATE.totalChannels || 72;
-  const chPerMod = Math.max(1, Math.ceil(totalCh / 3));
 
   for (let i = 1; i <= totalCh; i++) {
     const dot = document.createElement('div');
     dot.className = 'det-dot';
     dot.id = `detDot-${i}`;
-    dot.title = `D${i} (XS${i <= chPerMod ? 1 : (i <= chPerMod * 2 ? 2 : 3)})`;
+    const modName = getDetectorModuleName(i);
+    dot.title = `D${i} (${modName})`;
     grid.appendChild(dot);
   }
 }
@@ -2331,7 +2263,6 @@ function updateIndividualChannelsVisual(fullData) {
   if (!fullData || !Array.isArray(fullData) || fullData.length === 0) return;
 
   const len = fullData.length;
-  const chPerMod = Math.max(1, Math.ceil(len / 3));
   let xs1Sum = 0, xs2Sum = 0, xs3Sum = 0;
   let xs1Count = 0, xs2Count = 0, xs3Count = 0;
 
@@ -2359,8 +2290,8 @@ function updateIndividualChannelsVisual(fullData) {
       }
     }
 
-    if (i < chPerMod) { xs1Sum += cps; xs1Count++; }
-    else if (i < chPerMod * 2) { xs2Sum += cps; xs2Count++; }
+    if (i % 3 === 0) { xs1Sum += cps; xs1Count++; }
+    else if (i % 3 === 1) { xs2Sum += cps; xs2Count++; }
     else { xs3Sum += cps; xs3Count++; }
   }
 
@@ -2807,10 +2738,7 @@ function executeScanCycle() {
     const elMax = document.getElementById('metricMaxCps');
     if (elMax) elMax.innerHTML = `${maxCps} <span class="kpi-unit">cps</span>`;
     
-    const chPerMod = Math.max(1, Math.ceil(fullData.length / 3));
-    let modLabel = 'XS1';
-    if (maxChannelIndex > chPerMod && maxChannelIndex <= chPerMod * 2) modLabel = 'XS2';
-    else if (maxChannelIndex > chPerMod * 2) modLabel = 'XS3';
+    const modLabel = getDetectorModuleName(maxChannelIndex);
     
     const elMaxCh = document.getElementById('metricMaxChannel');
     if (elMaxCh) elMaxCh.textContent = `Detector D${maxChannelIndex < 10 ? '0' + maxChannelIndex : maxChannelIndex} (${modLabel})`;
@@ -3341,9 +3269,8 @@ function generateScientificMatrixCsv() {
     const c = (i % 9) + 1;
     const cellId = `Cell ${r}${c}`;
     const detNum = `D${(i + 1) < 10 ? '0' + (i + 1) : (i + 1)}`;
-    let modName = "XS1 (0x01)";
-    if (i >= 24 && i < 48) modName = "XS2 (0x02)";
-    if (i >= 48) modName = "XS3 (0x03)";
+    const modIdx = (i % 3);
+    const modName = `XS${modIdx + 1} (0x0${modIdx + 1})`;
 
     const posX = (-25.0 + (c - 1) * 0.5).toFixed(1);
     const posY = (19.0 - (r - 1) * 0.5).toFixed(1);
@@ -4296,10 +4223,7 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           document.getElementById('metricActiveLoop').innerHTML = `${detectedRows} <span class="kpi-unit">/ ${detectedRows}</span>`;
           document.getElementById('metricMaxCps').innerHTML = `${globalPeakCps} <span class="kpi-unit">cps</span>`;
           
-          const chPerMod = Math.max(1, Math.ceil(detectedCols / 3));
-          let modLabel = 'XS1';
-          if (peakChannelIdx > chPerMod && peakChannelIdx <= chPerMod * 2) modLabel = 'XS2';
-          else if (peakChannelIdx > chPerMod * 2) modLabel = 'XS3';
+          const modLabel = getDetectorModuleName(peakChannelIdx);
           document.getElementById('metricMaxChannel').textContent = `Detector D${peakChannelIdx < 10 ? '0' + peakChannelIdx : peakChannelIdx} (${modLabel})`;
           document.getElementById('metricAvgCps').innerHTML = `${avgCpsVal} <span class="kpi-unit">cps</span>`;
           document.getElementById('metricTotalCounts').innerHTML = `${totalSumCps.toLocaleString()} <span class="kpi-unit">cts</span>`;
