@@ -262,11 +262,11 @@
             <div class="tt-grid-info">
               <div class="tt-stat-row">
                 <span>Height:</span>
-                <span class="tt-val" id="ttHeightLevel">Loop 5 (175 cm)</span>
+                <span class="tt-val" id="ttHeightLevel">Blok 03 (15 cm)</span>
               </div>
               <div class="tt-stat-row">
                 <span>Pos (X, Z):</span>
-                <span class="tt-val" id="ttCoordinates">422 cm, 175 cm</span>
+                <span class="tt-val" id="ttCoordinates">27.3 cm, 15.0 cm</span>
               </div>
               <div class="tt-stat-row">
                 <span>Counts:</span>
@@ -316,15 +316,15 @@
           <div class="spatial-hud-overlay">
             <div class="hud-stat-box">
               <div class="h-lbl">POS X</div>
-              <div class="h-val highlight" id="statPosX">412.5 cm</div>
+              <div class="h-val highlight" id="statPosX">27.3 cm</div>
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">POS Y</div>
-              <div class="h-val highlight" id="statPosY">-32.7 cm</div>
+              <div class="h-val highlight" id="statPosY">-12.5 cm</div>
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">POS Z</div>
-              <div class="h-val highlight" id="statPosZ">186.4 cm</div>
+              <div class="h-val highlight" id="statPosZ">15.0 cm</div>
             </div>
           </div>
         </div>
@@ -346,11 +346,11 @@
               <div class="tt-grid-info">
                 <div class="tt-stat-row">
                   <span>Height:</span>
-                  <span class="tt-val" id="tvtBlok">Blok 03 (105 cm)</span>
+                  <span class="tt-val" id="tvtBlok">Blok 03 (15 cm)</span>
                 </div>
                 <div class="tt-stat-row">
                   <span>Pos (X, Z):</span>
-                  <span class="tt-val" id="tvtCoords">363.6 cm, 105.0 cm</span>
+                  <span class="tt-val" id="tvtCoords">27.3 cm, 15.0 cm</span>
                 </div>
                 <div class="tt-stat-row">
                   <span>Counts:</span>
@@ -872,11 +872,11 @@ function isMatrixRowActive(rowIndex) {
 }
 
 function detectorXCm(col, numCols) {
-  return numCols > 1 ? (col / (numCols - 1)) * 800 : 400;
+  return numCols > 1 ? (col / (numCols - 1)) * 60.0 : 30.0;
 }
 
 function heightZCm(row) {
-  return (row + 1) * 35;
+  return (row + 1) * 5.0;
 }
 
 function recompute3DSourceLocalization() {
@@ -934,8 +934,8 @@ function recompute3DSourceLocalization() {
     bg = Math.max(0.5, sorted[Math.floor(sorted.length * 0.2)] || 1);
   }
 
-  const sigmaX = Math.max(25, (numCols > 1 ? 800 / (numCols - 1) : 80) * 1.25);
-  const sigmaZ = 35 * 0.95;
+  const sigmaX = Math.max(3.0, (numCols > 1 ? 60.0 / (numCols - 1) : 5.0) * 1.25);
+  const sigmaZ = 5.0 * 0.95;
   const invVarX = 1 / (2 * sigmaX * sigmaX);
   const invVarZ = 1 / (2 * sigmaZ * sigmaZ);
 
@@ -1023,7 +1023,7 @@ function recompute3DSourceLocalization() {
   const centerRow = hypotheses.length ? meanRow : peakRow;
   const estX = Number((hypotheses.length ? meanX : detectorXCm(peakCol, numCols)).toFixed(1));
   const estZ = Number((hypotheses.length ? meanZ : heightZCm(peakRow)).toFixed(1));
-  const estY = -30.0;
+  const estY = -12.5;
 
   const nHyp = Math.max(2, hypotheses.length);
   const concentration = 1 - (entropy / Math.log(nHyp));
@@ -1289,8 +1289,8 @@ function renderContourView(width, height) {
     centerCol = APP_STATE.estimatedSource.centerCol;
     centerRow = APP_STATE.estimatedSource.centerRow;
   } else if (APP_STATE.estimatedSource) {
-    centerCol = (APP_STATE.estimatedSource.x / 800) * (numCols - 1);
-    centerRow = (APP_STATE.estimatedSource.z / 35) - 1;
+    centerCol = (APP_STATE.estimatedSource.x / 60.0) * (numCols - 1);
+    centerRow = (APP_STATE.estimatedSource.z / 5.0) - 1;
   }
 
   const normC = numCols > 1 ? (Math.max(0, Math.min(numCols - 1, centerCol)) / (numCols - 1)) : 0.5;
@@ -1492,22 +1492,21 @@ function render3DSourceViewport() {
   ctx3D.fillStyle = isLight ? '#f8fafc' : '#040714';
   ctx3D.fillRect(0, 0, w, h);
 
-  // Dynamic max Z based on total height levels from TiDB
-  const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 10);
-  const maxZ = Math.max(350, numRows * 35);
-  const maxZAxis = Math.ceil(maxZ / 100) * 100; // e.g. 400 cm
+  // Dynamic max Z based on total height levels from TiDB (5 cm per level)
+  const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 5);
+  const maxZAxis = Math.max(25.0, numRows * 5.0); // e.g. 25 cm for 5 rows
 
-  // 3D Isometric Projection Parameters (tuned to match Gambar 3)
+  // 3D Isometric Projection Parameters (tuned to match Gambar 3 with 60x25x25 cm box)
   const originX = 85;
   const originY = 175;
-  const axisX_dx = 225, axisX_dy = 30;    // X goes right and slightly down
-  const axisY_dx = 145, axisY_dy = -35;   // Y goes right and up (depth)
-  const axisZ_dy = -125;                  // Z goes straight up
+  const axisX_dx = 225, axisX_dy = 30;    // X goes right and slightly down (0 to 60 cm)
+  const axisY_dx = 145, axisY_dy = -35;   // Y goes right and up (depth: -25 to 0 cm)
+  const axisZ_dy = -125;                  // Z goes straight up (0 to 25 cm)
 
-  const yMin = -200, yMax = 20;
+  const yMin = -25.0, yMax = 0.0;
 
   function project3D(x, y, z) {
-    const normX = Math.max(0, Math.min(1, x / 800.0));
+    const normX = Math.max(0, Math.min(1, x / 60.0));
     const normY = Math.max(0, Math.min(1, (y - yMin) / (yMax - yMin)));
     const normZ = Math.max(0, Math.min(1, z / maxZAxis));
 
@@ -1518,8 +1517,8 @@ function render3DSourceViewport() {
 
   // 1. Draw Floor Grid Plane (Z = 0)
   const fl_c0 = project3D(0, yMin, 0);
-  const fl_c1 = project3D(800, yMin, 0);
-  const fl_c2 = project3D(800, yMax, 0);
+  const fl_c1 = project3D(60, yMin, 0);
+  const fl_c2 = project3D(60, yMax, 0);
   const fl_c3 = project3D(0, yMax, 0);
 
   ctx3D.fillStyle = isLight ? 'rgba(226, 232, 240, 0.5)' : 'rgba(15, 23, 42, 0.55)';
@@ -1534,7 +1533,7 @@ function render3DSourceViewport() {
   // Floor grid lines
   ctx3D.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.4)' : 'rgba(59, 130, 246, 0.18)';
   ctx3D.lineWidth = 0.8;
-  for (let gx = 200; gx < 800; gx += 200) {
+  for (let gx = 20; gx < 60; gx += 20) {
     const pStart = project3D(gx, yMin, 0);
     const pEnd = project3D(gx, yMax, 0);
     ctx3D.beginPath();
@@ -1542,9 +1541,9 @@ function render3DSourceViewport() {
     ctx3D.lineTo(pEnd.px, pEnd.py);
     ctx3D.stroke();
   }
-  for (let gy = -150; gy < yMax; gy += 50) {
+  for (let gy = -20; gy < yMax; gy += 5) {
     const pStart = project3D(0, gy, 0);
-    const pEnd = project3D(800, gy, 0);
+    const pEnd = project3D(60, gy, 0);
     ctx3D.beginPath();
     ctx3D.moveTo(pStart.px, pStart.py);
     ctx3D.lineTo(pEnd.px, pEnd.py);
@@ -1553,8 +1552,8 @@ function render3DSourceViewport() {
 
   // 2. Draw Back Wall Grid Plane (Y = yMax)
   const bw_c0 = project3D(0, yMax, 0);
-  const bw_c1 = project3D(800, yMax, 0);
-  const bw_c2 = project3D(800, yMax, maxZAxis);
+  const bw_c1 = project3D(60, yMax, 0);
+  const bw_c2 = project3D(60, yMax, maxZAxis);
   const bw_c3 = project3D(0, yMax, maxZAxis);
 
   ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.35)' : 'rgba(11, 19, 43, 0.35)';
@@ -1566,7 +1565,7 @@ function render3DSourceViewport() {
   ctx3D.closePath();
   ctx3D.fill();
 
-  for (let gx = 200; gx < 800; gx += 200) {
+  for (let gx = 20; gx < 60; gx += 20) {
     const pStart = project3D(gx, yMax, 0);
     const pEnd = project3D(gx, yMax, maxZAxis);
     ctx3D.beginPath();
@@ -1574,9 +1573,9 @@ function render3DSourceViewport() {
     ctx3D.lineTo(pEnd.px, pEnd.py);
     ctx3D.stroke();
   }
-  for (let gz = 100; gz < maxZAxis; gz += 100) {
+  for (let gz = 5; gz < maxZAxis; gz += 5) {
     const pStart = project3D(0, yMax, gz);
-    const pEnd = project3D(800, yMax, gz);
+    const pEnd = project3D(60, yMax, gz);
     ctx3D.beginPath();
     ctx3D.moveTo(pStart.px, pStart.py);
     ctx3D.lineTo(pEnd.px, pEnd.py);
@@ -1598,7 +1597,7 @@ function render3DSourceViewport() {
   ctx3D.closePath();
   ctx3D.fill();
 
-  for (let gy = -150; gy < yMax; gy += 50) {
+  for (let gy = -20; gy < yMax; gy += 5) {
     const pStart = project3D(0, gy, 0);
     const pEnd = project3D(0, gy, maxZAxis);
     ctx3D.beginPath();
@@ -1606,7 +1605,7 @@ function render3DSourceViewport() {
     ctx3D.lineTo(pEnd.px, pEnd.py);
     ctx3D.stroke();
   }
-  for (let gz = 100; gz < maxZAxis; gz += 100) {
+  for (let gz = 5; gz < maxZAxis; gz += 5) {
     const pStart = project3D(0, yMin, gz);
     const pEnd = project3D(0, yMax, gz);
     ctx3D.beginPath();
@@ -1653,8 +1652,8 @@ function render3DSourceViewport() {
   ctx3D.font = '700 8.5px "IBM Plex Mono", monospace';
   ctx3D.textAlign = 'right';
 
-  // Z-Axis Ticks: 0, 100, 200, 300, 400
-  for (let gz = 0; gz <= maxZAxis; gz += 100) {
+  // Z-Axis Ticks: 0, 5, 10, 15, 20, 25 cm
+  for (let gz = 0; gz <= maxZAxis; gz += 5) {
     const pt = project3D(0, yMin, gz);
     ctx3D.fillText(`${gz}`, pt.px - 6, pt.py + 3);
     ctx3D.beginPath();
@@ -1673,10 +1672,10 @@ function render3DSourceViewport() {
   ctx3D.fillText('Z (cm)', 0, 0);
   ctx3D.restore();
 
-  // X-Axis Ticks: 0, 200, 400, 800
+  // X-Axis Ticks: 0, 20, 40, 60
   ctx3D.textAlign = 'center';
   ctx3D.font = '700 8.5px "IBM Plex Mono", monospace';
-  const xTicks = [0, 200, 400, 800];
+  const xTicks = [0, 20, 40, 60];
   xTicks.forEach(gx => {
     const pt = project3D(gx, yMin, 0);
     ctx3D.fillText(`${gx}`, pt.px, pt.py + 13);
@@ -1687,26 +1686,26 @@ function render3DSourceViewport() {
   });
 
   // X-Axis Title
-  const xMid = project3D(400, yMin, 0);
+  const xMid = project3D(30, yMin, 0);
   ctx3D.fillText('X (cm)', xMid.px, xMid.py + 25);
 
-  // Y-Axis Ticks: -200, 0, 20
+  // Y-Axis Ticks: -25, -12.5, 0
   ctx3D.textAlign = 'left';
-  const yTicks = [-200, 0, 20];
+  const yTicks = [-25, -12.5, 0];
   yTicks.forEach(gy => {
-    const pt = project3D(800, gy, 0);
+    const pt = project3D(60, gy, 0);
     ctx3D.fillText(`${gy}`, pt.px + 6, pt.py + 3);
   });
 
   // Y-Axis Title
-  const yMid = project3D(800, -80, 0);
+  const yMid = project3D(60, -12.5, 0);
   ctx3D.fillText('Y (cm)', yMid.px + 14, yMid.py + 14);
 
   // 5. Active Elevator Scanning Bar at Current Height Step
   const curH = Math.max(1, APP_STATE.currentHeight || numRows);
-  const curZ = curH * 35;
+  const curZ = curH * 5;
   const barStart = project3D(0, 0, curZ);
-  const barEnd = project3D(800, 0, curZ);
+  const barEnd = project3D(60, 0, curZ);
   ctx3D.strokeStyle = isLight ? 'rgba(5, 150, 105, 0.7)' : 'rgba(52, 211, 153, 0.65)';
   ctx3D.lineWidth = 2;
   ctx3D.beginPath();
@@ -1715,10 +1714,10 @@ function render3DSourceViewport() {
   ctx3D.stroke();
 
   // 6. Estimated Source Position 3D Sphere (Matching Gambar 3!)
-  const src = APP_STATE.estimatedSource || { x: 412.5, y: -30.0, z: 105.0 };
-  const estX = Number(src.x) || 400;
-  const estY = Number(src.y) || -30;
-  const estZ = Number(src.z) || 105;
+  const src = APP_STATE.estimatedSource || { x: 27.3, y: -12.5, z: 15.0 };
+  const estX = (Number(src.x) !== undefined && !isNaN(src.x)) ? Number(src.x) : 30.0;
+  const estY = (Number(src.y) !== undefined && !isNaN(src.y)) ? Number(src.y) : -12.5;
+  const estZ = (Number(src.z) !== undefined && !isNaN(src.z)) ? Number(src.z) : 15.0;
 
   const pSrc = project3D(estX, estY, estZ);
   const pBase = project3D(estX, estY, 0);
@@ -1930,13 +1929,14 @@ function renderTopViewXZ() {
   ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
   ctxTop.font = '8px "IBM Plex Mono", monospace';
   ctxTop.textAlign = 'center';
-  ctxTop.fillText('X · Detector Channel Array (0 – 800 cm)', plotX + plotW / 2, h - 8);
+  ctxTop.fillText('X · Detector Channel Array (0 – 60 cm)', plotX + plotW / 2, h - 8);
 
   // X Axis distance ticks
   ctxTop.textAlign = 'center';
   ctxTop.fillText('0 cm', plotX, plotY + plotH + 12);
-  ctxTop.fillText('400 cm', plotX + plotW / 2, plotY + plotH + 12);
-  ctxTop.fillText('800 cm', plotX + plotW, plotY + plotH + 12);
+  ctxTop.fillText('20 cm', plotX + plotW / 3, plotY + plotH + 12);
+  ctxTop.fillText('40 cm', plotX + (2 * plotW) / 3, plotY + plotH + 12);
+  ctxTop.fillText('60 cm', plotX + plotW, plotY + plotH + 12);
 
   // Z Axis labels at left (Blok / Height)
   ctxTop.save();
@@ -1956,21 +1956,21 @@ function renderTopViewXZ() {
   }
 
   // Estimated Source Position from Bayesian Localization
-  const maxZ = Math.max(heightZCm(numRows - 1), numRows * 35);
+  const maxZ = Math.max(heightZCm(numRows - 1), numRows * 5.0);
   const colPos = (src.centerCol !== undefined && Number.isFinite(src.centerCol))
     ? src.centerCol
-    : (numCols > 1 ? (Number(src.x || 400) / 800) * (numCols - 1) : (numCols - 1) / 2);
+    : (numCols > 1 ? (Number(src.x || 30.0) / 60.0) * (numCols - 1) : (numCols - 1) / 2);
   const rowPos = (src.centerRow !== undefined && Number.isFinite(src.centerRow))
     ? src.centerRow
-    : ((Number(src.z || 105) / 35) - 1);
+    : ((Number(src.z || 15.0) / 5.0) - 1);
 
   const srcX = plotX + ((Math.max(0, Math.min(numCols - 1, colPos)) + 0.5) / numCols) * plotW;
   const srcZ = plotY + ((Math.max(0, Math.min(numRows - 1, rowPos)) + 0.5) / numRows) * plotH;
 
   // Bayesian Uncertainty Ellipse & Soft Radial Halo
-  const sigX = src.sigmaX || 30;
-  const sigZ = src.sigmaZ || 25;
-  const rx = Math.max(8, (sigX / 800) * plotW * 1.4);
+  const sigX = src.sigmaX || 6.0;
+  const sigZ = src.sigmaZ || 5.0;
+  const rx = Math.max(8, (sigX / 60.0) * plotW * 1.4);
   const ry = Math.max(8, (sigZ / maxZ) * plotH * 1.4);
 
   // Soft Radial Bayesian Halo
@@ -2031,8 +2031,8 @@ function renderTopViewXZ() {
   ctxTop.fill();
 
   // Floating Precision Coordinate Badge Tag
-  const estXVal = src.x !== undefined ? src.x : 400.0;
-  const estZVal = src.z !== undefined ? src.z : 105.0;
+  const estXVal = src.x !== undefined ? src.x : 27.3;
+  const estZVal = src.z !== undefined ? src.z : 15.0;
   const peakDet = (src.peakCol !== undefined ? src.peakCol + 1 : 1);
   const tagText = `X: ${estXVal} cm · Z: ${estZVal} cm (Peak: ${src.peakCps || 0} CPS @ D${peakDet < 10 ? '0' + peakDet : peakDet})`;
 
@@ -2257,7 +2257,7 @@ canvas.addEventListener('mousemove', (e) => {
 
     document.getElementById('ttDetectorName').textContent = `Detector D${detNumber < 10 ? '0' + detNumber : detNumber}`;
     document.getElementById('ttModuleTag').textContent = modName;
-    document.getElementById('ttHeightLevel').textContent = `Blok ${blokNum < 10 ? '0' + blokNum : blokNum} (${blokNum * 35} cm)`;
+    document.getElementById('ttHeightLevel').textContent = `Blok ${blokNum < 10 ? '0' + blokNum : blokNum} (${blokNum * 5} cm)`;
     document.getElementById('ttCoordinates').textContent = `D${detNumber < 10 ? '0' + detNumber : detNumber}, Blok ${blokNum < 10 ? '0' + blokNum : blokNum}`;
     document.getElementById('ttCpsValue').textContent = (cpsVal !== '--') ? `${cpsVal} CPS` : 'No Data';
     document.getElementById('ttDoseRate').textContent = isAvailable ? `${doseRate} µSv/h` : '--';
@@ -3070,7 +3070,7 @@ function buildSidebarLoopList(forceRebuild = false) {
         <input type="checkbox" id="loopCheck-${i}" class="loop-checkbox" ${isChecked ? 'checked' : ''} onchange="toggleLoopSelection(${i}, this.checked)" onclick="event.stopPropagation()">
         <span class="loop-name">Blok ${i < 10 ? '0' + i : i}</span>
       </div>
-      <span class="loop-height-tag">${i * 35} cm</span>
+      <span class="loop-height-tag">${i * 5} cm</span>
     `;
     container.appendChild(item);
   }
@@ -3254,7 +3254,7 @@ function updateRawTable() {
     const isLoopSelected = APP_STATE.selectedLoops.has(blokNum);
 
     if (isCompleted && isLoopSelected && rowData) {
-      let tr = `<tr><td style="text-align:left;padding-left:12px;"><strong style="color:#60A5FA;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</strong> <span style="font-size:10px;color:var(--text-muted);">(${blokNum * 35} cm)</span></td>`;
+      let tr = `<tr><td style="text-align:left;padding-left:12px;"><strong style="color:#60A5FA;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</strong> <span style="font-size:10px;color:var(--text-muted);">(${blokNum * 5} cm)</span></td>`;
       for (let c = 0; c < numCols; c++) {
         const cps = (rowData[c] !== undefined) ? Number(rowData[c]) : 0;
         const isHotspot = cps >= APP_STATE.hotspotThreshold && APP_STATE.hotspotThreshold > 0;
@@ -3265,7 +3265,7 @@ function updateRawTable() {
       tbody.innerHTML += tr;
     } else if (isCompleted && !isLoopSelected && rowData) {
       // Unselected in sidebar (dimmed/grayed out row matching heatmap matrix)
-      let tr = `<tr class="row-unselected"><td style="text-align:left;padding-left:12px;"><span style="color:#64748b;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</span> <span style="font-size:10px;color:#64748b;">(${blokNum * 35} cm)</span></td>`;
+      let tr = `<tr class="row-unselected"><td style="text-align:left;padding-left:12px;"><span style="color:#64748b;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</span> <span style="font-size:10px;color:#64748b;">(${blokNum * 5} cm)</span></td>`;
       for (let c = 0; c < numCols; c++) {
         tr += `<td style="color:#64748b;">--</td>`;
       }
@@ -3273,7 +3273,7 @@ function updateRawTable() {
       tbody.innerHTML += tr;
     } else {
       // Not completed yet
-      let tr = `<tr class="row-unselected"><td style="text-align:left;padding-left:12px;"><span style="color:#64748b;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</span> <span style="font-size:10px;color:#64748b;">(${blokNum * 35} cm)</span></td>`;
+      let tr = `<tr class="row-unselected"><td style="text-align:left;padding-left:12px;"><span style="color:#64748b;">Blok ${blokNum < 10 ? '0' + blokNum : blokNum}</span> <span style="font-size:10px;color:#64748b;">(${blokNum * 5} cm)</span></td>`;
       for (let c = 0; c < numCols; c++) {
         tr += `<td style="color:#64748b;">--</td>`;
       }
@@ -3344,7 +3344,7 @@ function generateScientificMatrixCsv() {
 
     const posX = (-25.0 + (c - 1) * 0.5).toFixed(1);
     const posY = (19.0 - (r - 1) * 0.5).toFixed(1);
-    const posZ = (r * 35).toFixed(1);
+    const posZ = (r * 5.0).toFixed(1);
     const meanCps = detectorAverages[i] ? detectorAverages[i].toFixed(1) : "0.0";
     const peakCps = detectorPeaks[i] ? detectorPeaks[i].toFixed(1) : "0.0";
     const doseRate = (parseFloat(meanCps) * 0.012).toFixed(3);
@@ -3367,13 +3367,13 @@ function generateScientificMatrixCsv() {
       const dataArr = rec.detector_data || [];
       const mx = rec.max_cps || 0;
       const av = rec.avg_cps || 0;
-      csv += `Loop ${h < 10 ? '0' + h : h},${h * 35} cm,${l},${ts},${dataArr.join(",")},${mx},${av}\n`;
+      csv += `Loop ${h < 10 ? '0' + h : h},${h * 5} cm,${l},${ts},${dataArr.join(",")},${mx},${av}\n`;
     });
   } else if (APP_STATE.matrixData && APP_STATE.matrixData.length > 0) {
     APP_STATE.matrixData.forEach((row, idx) => {
       const mx = Math.max(...row);
       const av = (row.reduce((a, b) => a + b, 0) / 72).toFixed(1);
-      csv += `Loop ${idx + 1 < 10 ? '0' + (idx + 1) : (idx + 1)},${(idx + 1) * 35} cm,1,${dateStr},${row.join(",")},${mx},${av}\n`;
+      csv += `Loop ${idx + 1 < 10 ? '0' + (idx + 1) : (idx + 1)},${(idx + 1) * 5} cm,1,${dateStr},${row.join(",")},${mx},${av}\n`;
     });
   }
 
