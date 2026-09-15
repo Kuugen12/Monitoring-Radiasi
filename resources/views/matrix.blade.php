@@ -332,11 +332,40 @@
         <!-- Top View X-Z Source Map & Info -->
         <div class="hud-spatial-card">
           <div class="spatial-head">
-            <span>Top-View Plane (X-Z)</span>
+            <span>Top-View Plane (X-Z) · Bayesian Matrix</span>
             <span class="badge-live" id="statConfidence">96.2% Confidence</span>
           </div>
-          <div class="canvas-spatial-stage">
+          <div class="canvas-spatial-stage" id="stageTopViewXZ" style="position:relative;">
             <canvas id="canvasTopViewXZ" width="500" height="220"></canvas>
+            <!-- Floating TopView Tooltip -->
+            <div class="matrix-tooltip" id="topViewTooltip" style="display:none;position:absolute;pointer-events:none;z-index:60;min-width:180px;">
+              <div class="tt-head">
+                <span class="tt-det-title" id="tvtChannel">Detector D06</span>
+                <span class="tt-mod-tag" id="tvtModule">XS2</span>
+              </div>
+              <div class="tt-grid-info">
+                <div class="tt-stat-row">
+                  <span>Pos (X, Z):</span>
+                  <span class="tt-val" id="tvtCoords" style="color:#f8fafc;font-weight:700;">363.6 cm, 105 cm</span>
+                </div>
+                <div class="tt-stat-row">
+                  <span>Blok:</span>
+                  <span class="tt-val" id="tvtBlok" style="color:#38bdf8;">Blok 03 (105 cm)</span>
+                </div>
+                <div class="tt-stat-row">
+                  <span>TiDB Count:</span>
+                  <span class="tt-val" id="tvtCps" style="color:#fbbf24;font-weight:700;">122 CPS</span>
+                </div>
+                <div class="tt-stat-row">
+                  <span>Bayesian Prob:</span>
+                  <span class="tt-val" id="tvtProb" style="color:#34d399;font-weight:700;">84.2%</span>
+                </div>
+                <div class="tt-stat-row">
+                  <span>Dist to Src:</span>
+                  <span class="tt-val" id="tvtDist">0.0 cm</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="spatial-hud-overlay">
             <div class="hud-stat-box">
@@ -345,7 +374,7 @@
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">METHOD</div>
-              <div class="h-val" style="color:#93c5fd;">Bayesian</div>
+              <div class="h-val" id="statMethod" style="color:#93c5fd;">Bayesian</div>
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">PEAK DETECTOR</div>
@@ -608,7 +637,7 @@ const APP_STATE = {
   timestamps: [],
   selectedLoops: new Set(),
   userModifiedLoops: false,
-  estimatedSource: { x: 412.5, y: -32.7, z: 186.4, confidence: 96.2 }
+  estimatedSource: { x: 412.5, y: -32.7, z: 186.4, confidence: 96.2, method: 'Bayesian' }
 };
 
 // 2. FIREBASE REALTIME DB INITIALIZATION
@@ -824,40 +853,58 @@ function updateChartTheme(isLight) {
   telemetryChart.update();
 }
 
-// 5. 3D & 2D SOURCE LOCALIZATION COMPUTATION ENGINE
+// 5. 3D & 2D SOURCE LOCALIZATION — Bayesian posterior over the TiDB X–Z matrix
+function isMatrixRowActive(rowIndex) {
+  if (!APP_STATE.selectedLoops || APP_STATE.selectedLoops.size === 0) return true;
+  return APP_STATE.selectedLoops.has(rowIndex + 1);
+}
+
+function detectorXCm(col, numCols) {
+  return numCols > 1 ? (col / (numCols - 1)) * 800.0 : 400.0;
+}
+
+function heightZCm(row) {
+  return (row + 1) * 35.0;
+}
+
 function recompute3DSourceLocalization() {
   if (!APP_STATE.matrixData || APP_STATE.matrixData.length === 0) return;
 
   const numRows = APP_STATE.matrixData.length;
   const numCols = (APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0) ? APP_STATE.matrixData[0].length : 72;
-  
+
+  const observations = [];
+  const values = [];
   let globalPeakCps = -1;
   let peakRow = 0;
   let peakCol = 0;
 
-  // 1. Cari titik dengan nilai CPS absolut tertinggi (sumber nilai paling tinggi / titik gelap)
   for (let r = 0; r < numRows; r++) {
-    const blokNum = r + 1;
-    if (APP_STATE.selectedLoops.size > 0 && !APP_STATE.selectedLoops.has(blokNum)) continue;
     const row = APP_STATE.matrixData[r];
     if (!row) continue;
+    const active = isMatrixRowActive(r);
     for (let c = 0; c < numCols; c++) {
       const val = Number(row[c]) || 0;
-      if (val > globalPeakCps) {
-        globalPeakCps = val;
-        peakRow = r;
-        peakCol = c;
+      if (active) {
+        observations.push({ r, c, n: val, x: detectorXCm(c, numCols), z: heightZCm(r) });
+        values.push(val);
+        if (val > globalPeakCps) {
+          globalPeakCps = val;
+          peakRow = r;
+          peakCol = c;
+        }
       }
     }
   }
 
-  // Fallback jika tidak ada row terpilih yang memiliki data
-  if (globalPeakCps < 0) {
+  if (globalPeakCps < 0 || observations.length === 0) {
     for (let r = 0; r < numRows; r++) {
       const row = APP_STATE.matrixData[r];
       if (!row) continue;
       for (let c = 0; c < numCols; c++) {
         const val = Number(row[c]) || 0;
+        observations.push({ r, c, n: val, x: detectorXCm(c, numCols), z: heightZCm(r) });
+        values.push(val);
         if (val > globalPeakCps) {
           globalPeakCps = val;
           peakRow = r;
@@ -869,62 +916,134 @@ function recompute3DSourceLocalization() {
 
   if (globalPeakCps < 0) globalPeakCps = 0;
 
-  // 2. Presisi lokal: Lakukan penghalusan sub-pixel HANYA pada lingkungan 3x3 di sekitar puncak tertinggi (peakRow, peakCol)
-  // Ini memastikan titik target selalu berada tepat di sumber nilai paling tinggi (berwarna gelap) dan tidak tertarik ke area kosong/kuning
-  let localWeight = 0;
-  let localWeightedCol = 0;
-  let localWeightedRow = 0;
-  const localCutoff = globalPeakCps * 0.75;
+  let bg = 1.0;
+  if (values.length > 0) {
+    const sorted = values.slice().sort((a, b) => a - b);
+    bg = Math.max(0.5, sorted[Math.floor(sorted.length * 0.2)] || 1.0);
+  }
 
-  for (let dr = -1; dr <= 1; dr++) {
-    const r = peakRow + dr;
-    if (r < 0 || r >= numRows) continue;
-    const blokNum = r + 1;
-    if (APP_STATE.selectedLoops.size > 0 && !APP_STATE.selectedLoops.has(blokNum)) continue;
-    const row = APP_STATE.matrixData[r];
-    if (!row) continue;
-    for (let dc = -1; dc <= 1; dc++) {
-      const c = peakCol + dc;
-      if (c < 0 || c >= numCols) continue;
-      const val = Number(row[c]) || 0;
-      if (val >= localCutoff && val > 0) {
-        const w = Math.pow(val - localCutoff + 1, 2);
-        localWeightedCol += c * w;
-        localWeightedRow += r * w;
-        localWeight += w;
-      }
+  const sigmaX = Math.max(25.0, (numCols > 1 ? 800.0 / (numCols - 1) : 80.0) * 1.25);
+  const sigmaZ = 35.0 * 0.95;
+  const invVarX = 1.0 / (2.0 * sigmaX * sigmaX);
+  const invVarZ = 1.0 / (2.0 * sigmaZ * sigmaZ);
+
+  const hypThreshold = bg + 0.05 * Math.max(0, globalPeakCps - bg);
+  let hypotheses = observations.filter((o) => o.n >= hypThreshold);
+  if (hypotheses.length < 4) hypotheses = observations.slice();
+  if (hypotheses.length > 180) {
+    hypotheses = hypotheses.slice().sort((a, b) => b.n - a.n).slice(0, 180);
+  }
+
+  const logL = new Array(hypotheses.length).fill(0.0);
+  let maxLogL = -Infinity;
+
+  for (let h = 0; h < hypotheses.length; h++) {
+    const src = hypotheses[h];
+    let g2 = 0.0;
+    let ng = 0.0;
+    const kernels = new Array(observations.length);
+
+    for (let i = 0; i < observations.length; i++) {
+      const det = observations[i];
+      const dx = det.x - src.x;
+      const dz = det.z - src.z;
+      const g = Math.exp(-(dx * dx * invVarX + dz * dz * invVarZ));
+      kernels[i] = g;
+      const excess = det.n - bg;
+      ng += excess * g;
+      g2 += g * g;
+    }
+
+    const S = g2 > 1e-12 ? Math.max(0.0, ng / g2) : 0.0;
+    let ll = 0.0;
+    for (let i = 0; i < observations.length; i++) {
+      const lambda = Math.max(1e-9, bg + S * kernels[i]);
+      ll += observations[i].n * Math.log(lambda) - lambda;
+    }
+    logL[h] = ll;
+    if (ll > maxLogL) maxLogL = ll;
+  }
+
+  const posterior = new Array(hypotheses.length);
+  let postSum = 0.0;
+  for (let h = 0; h < hypotheses.length; h++) {
+    const p = Math.exp(logL[h] - maxLogL);
+    posterior[h] = p;
+    postSum += p;
+  }
+  if (postSum <= 0) postSum = 1.0;
+  for (let h = 0; h < hypotheses.length; h++) posterior[h] /= postSum;
+
+  let meanCol = 0.0;
+  let meanRow = 0.0;
+  let meanX = 0.0;
+  let meanZ = 0.0;
+  let entropy = 0.0;
+  let mapIdx = 0;
+  let mapP = -1.0;
+  const posteriorGrid = Array.from({ length: numRows }, () => new Array(numCols).fill(0.0));
+
+  for (let h = 0; h < hypotheses.length; h++) {
+    const p = posterior[h];
+    const src = hypotheses[h];
+    meanCol += src.c * p;
+    meanRow += src.r * p;
+    meanX += src.x * p;
+    meanZ += src.z * p;
+    if (p > 1e-12) entropy -= p * Math.log(p);
+    if (p > mapP) {
+      mapP = p;
+      mapIdx = h;
+    }
+    if (posteriorGrid[src.r] && posteriorGrid[src.r][src.c] !== undefined) {
+      posteriorGrid[src.r][src.c] = p;
     }
   }
 
-  const centerCol = (localWeight > 0) ? (localWeightedCol / localWeight) : peakCol;
-  const centerRow = (localWeight > 0) ? (localWeightedRow / localWeight) : peakRow;
+  let varX = 0.0;
+  let varZ = 0.0;
+  let covXZ = 0.0;
+  for (let h = 0; h < hypotheses.length; h++) {
+    const p = posterior[h];
+    const dx = hypotheses[h].x - meanX;
+    const dz = hypotheses[h].z - meanZ;
+    varX += p * dx * dx;
+    varZ += p * dz * dz;
+    covXZ += p * dx * dz;
+  }
 
-  // Physical coordinates:
-  // X: 0 cm to 800 cm across detector columns (Column 0 = 0 cm, Column numCols - 1 = 800 cm)
-  const estX = numCols > 1 ? Number(((centerCol / (numCols - 1)) * 800).toFixed(1)) : 400.0;
-  
-  // Z: height in cm. Each row r (0 to numRows-1) corresponds to height (r + 1) * 35 cm
-  // (e.g. Row 0 = 35 cm, Row 1 = 70 cm, ..., Row N-1 = N * 35 cm)
-  const estZ = Number(((centerRow + 1) * 35).toFixed(1));
-  const estY = -30.0; // Distance / Depth offset in cm
+  const centerCol = hypotheses.length ? meanCol : peakCol;
+  const centerRow = hypotheses.length ? meanRow : peakRow;
+  const estX = Number((hypotheses.length ? meanX : detectorXCm(peakCol, numCols)).toFixed(1));
+  const estZ = Number((hypotheses.length ? meanZ : heightZCm(peakRow)).toFixed(1));
+  const estY = -30.0;
 
-  const confidence = globalPeakCps > 0 
-    ? Math.min(99.0, 70.0 + (globalPeakCps / 350) * 28).toFixed(1)
-    : '60.0';
+  const nHyp = Math.max(2, hypotheses.length);
+  const concentration = 1.0 - (entropy / Math.log(nHyp));
+  const snr = globalPeakCps > bg ? (globalPeakCps - bg) / Math.max(bg, 1.0) : 0.0;
+  const snrTerm = Math.min(1.0, snr / 8.0);
+  const confidence = Math.min(99.4, Math.max(50.0, 60.0 + 28.0 * Math.max(0.0, Math.min(1.0, concentration)) + 11.4 * snrTerm)).toFixed(1);
 
   APP_STATE.estimatedSource = {
     x: estX,
     y: estY,
     z: estZ,
     confidence: confidence,
+    method: 'Bayesian MAP',
     centerCol: centerCol,
     centerRow: centerRow,
     peakCol: peakCol,
     peakRow: peakRow,
-    peakCps: globalPeakCps
+    peakCps: globalPeakCps,
+    mapCol: hypotheses[mapIdx] ? hypotheses[mapIdx].c : peakCol,
+    mapRow: hypotheses[mapIdx] ? hypotheses[mapIdx].r : peakRow,
+    sigmaX: Math.sqrt(Math.max(varX, 1.0)),
+    sigmaZ: Math.sqrt(Math.max(varZ, 1.0)),
+    covXZ: covXZ,
+    posteriorGrid: posteriorGrid,
+    bg: bg
   };
 
-  // Update UI stats in HUD
   const spX = document.getElementById('statPosX');
   if (spX) spX.textContent = `${estX} cm`;
   const spY = document.getElementById('statPosY');
@@ -935,13 +1054,15 @@ function recompute3DSourceLocalization() {
   if (sConf) sConf.textContent = `${confidence}% Confidence`;
   const sConfV = document.getElementById('statConfidenceVal');
   if (sConfV) sConfV.textContent = `${confidence}%`;
+  const sMethod = document.getElementById('statMethod');
+  if (sMethod) sMethod.textContent = 'Bayesian';
 
   const peakDetectorNumber = peakCol + 1;
   const chPerMod = Math.max(1, Math.ceil(numCols / 3));
   let modLabel = 'XS1';
   if (peakDetectorNumber > chPerMod && peakDetectorNumber <= chPerMod * 2) modLabel = 'XS2';
   else if (peakDetectorNumber > chPerMod * 2) modLabel = 'XS3';
-  
+
   const sHs = document.getElementById('statHotspotCount');
   if (sHs) sHs.textContent = `${modLabel} (D${peakDetectorNumber < 10 ? '0' + peakDetectorNumber : peakDetectorNumber})`;
 }
@@ -1451,7 +1572,7 @@ function render3DSourceViewport() {
   ctx3D.stroke();
 }
 
-// 9. TOP VIEW X-Z CROSSHAIR RENDERER
+// 9. TOP VIEW X-Z — TiDB matrix heatmap + Bayesian posterior density marker
 function renderTopViewXZ() {
   const canvasTop = document.getElementById('canvasTopViewXZ');
   if (!canvasTop) return;
@@ -1464,50 +1585,327 @@ function renderTopViewXZ() {
   ctxTop.fillStyle = isLight ? '#f8fafc' : '#03060E';
   ctxTop.fillRect(0, 0, w, h);
 
+  const padL = 48;
+  const padR = 14;
+  const padT = 20;
+  const padB = 26;
+  const plotX = padL;
+  const plotY = padT;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+
+  const matrix = APP_STATE.matrixData || [];
+  const numRows = Math.max(1, matrix.length || APP_STATE.totalHeights || 10);
+  const numCols = (matrix[0] && matrix[0].length > 0)
+    ? matrix[0].length
+    : (APP_STATE.totalChannels || 36);
+
+  let dynamicMax = APP_STATE.objectMaxCps || 0;
+  for (let r = 0; r < matrix.length; r++) {
+    const row = matrix[r];
+    if (!row) continue;
+    for (let c = 0; c < numCols; c++) {
+      const v = Number(row[c]) || 0;
+      if (v > dynamicMax) dynamicMax = v;
+    }
+  }
+  if (dynamicMax <= 0) dynamicMax = 17;
+
+  const cellW = plotW / numCols;
+  const cellH = plotH / numRows;
+  const src = APP_STATE.estimatedSource || {};
+  const posteriorGrid = src.posteriorGrid || null;
+  let maxPost = 0;
+  if (posteriorGrid) {
+    for (let r = 0; r < posteriorGrid.length; r++) {
+      for (let c = 0; c < (posteriorGrid[r] || []).length; c++) {
+        if (posteriorGrid[r][c] > maxPost) maxPost = posteriorGrid[r][c];
+      }
+    }
+  }
+
+  // 1. Subtle Spatial Background Coordinate Grid
   ctxTop.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.04)';
   ctxTop.lineWidth = 1;
-  for (let x = 0; x < w; x += 40) {
+  for (let c = 0; c <= numCols; c++) {
+    const gx = plotX + c * cellW;
     ctxTop.beginPath();
-    ctxTop.moveTo(x, 0);
-    ctxTop.lineTo(x, h);
+    ctxTop.moveTo(gx, plotY);
+    ctxTop.lineTo(gx, plotY + plotH);
     ctxTop.stroke();
   }
-  for (let y = 0; y < h; y += 30) {
+  for (let r = 0; r <= numRows; r++) {
+    const gy = plotY + r * cellH;
     ctxTop.beginPath();
-    ctxTop.moveTo(0, y);
-    ctxTop.lineTo(w, y);
+    ctxTop.moveTo(plotX, gy);
+    ctxTop.lineTo(plotX + plotW, gy);
     ctxTop.stroke();
   }
 
-  const padding = 18;
-  const plotW = w - padding * 2;
-  const plotH = h - padding * 2;
+  // 2. Base TiDB Matrix Radiation Heatmap Cells
+  for (let r = 0; r < numRows; r++) {
+    const row = matrix[r];
+    const active = isMatrixRowActive(r);
+    for (let c = 0; c < numCols; c++) {
+      const val = (row && row[c] !== undefined) ? Number(row[c]) || 0 : null;
+      const x = plotX + c * cellW;
+      const y = plotY + r * cellH;
+      if (val !== null) {
+        ctxTop.fillStyle = getColorForValue(val, dynamicMax);
+        ctxTop.globalAlpha = active ? 0.92 : 0.25;
+        ctxTop.fillRect(x + 0.5, y + 0.5, cellW - 0.5, cellH - 0.5);
+      }
+    }
+  }
+  ctxTop.globalAlpha = 1;
 
-  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.4)' : 'rgba(59, 130, 246, 0.4)';
-  ctxTop.strokeRect(padding, padding, plotW, plotH);
+  // 3. Bayesian Posterior Probability Density Cloud & Isocontour Rings
+  if (posteriorGrid && maxPost > 0) {
+    for (let r = 0; r < numRows; r++) {
+      for (let c = 0; c < numCols; c++) {
+        const prob = posteriorGrid[r] ? (posteriorGrid[r][c] || 0) : 0;
+        if (prob > 0.005) {
+          const ratio = prob / maxPost;
+          const cx = plotX + (c + 0.5) * cellW;
+          const cy = plotY + (r + 0.5) * cellH;
+          const rad = Math.max(cellW, cellH) * (1.1 + 0.9 * ratio);
 
-  const maxZ = Math.max(175, (APP_STATE.totalHeights || 10) * 35);
-  const src = APP_STATE.estimatedSource || { x: 400, z: 175 };
-  const srcX = padding + (Math.max(0, Math.min(800, src.x)) / 800) * plotW;
-  const srcZ = padding + ((maxZ - Math.max(0, Math.min(maxZ, src.z))) / maxZ) * plotH;
+          const grad = ctxTop.createRadialGradient(cx, cy, 1, cx, cy, rad);
+          grad.addColorStop(0, `rgba(239, 68, 68, ${0.42 * ratio + 0.12})`);
+          grad.addColorStop(0.5, `rgba(245, 158, 11, ${0.22 * ratio})`);
+          grad.addColorStop(1, 'rgba(239, 68, 68, 0)');
 
-  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+          ctxTop.fillStyle = grad;
+          ctxTop.beginPath();
+          ctxTop.arc(cx, cy, rad, 0, Math.PI * 2);
+          ctxTop.fill();
+        }
+      }
+    }
+  }
+
+  // 4. Module Zone Delimiters (XS1, XS2, XS3)
+  const chPerMod = Math.max(1, Math.ceil(numCols / 3));
+  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.4)' : 'rgba(147, 197, 253, 0.4)';
+  ctxTop.lineWidth = 1;
+  ctxTop.setLineDash([4, 3]);
+  for (let m = 1; m < 3; m++) {
+    const mx = plotX + m * chPerMod * cellW;
+    ctxTop.beginPath();
+    ctxTop.moveTo(mx, plotY);
+    ctxTop.lineTo(mx, plotY + plotH);
+    ctxTop.stroke();
+  }
+  ctxTop.setLineDash([]);
+
+  // 5. Plane Bounding Box
+  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.5)' : 'rgba(59, 130, 246, 0.6)';
+  ctxTop.lineWidth = 1.25;
+  ctxTop.strokeRect(plotX, plotY, plotW, plotH);
+
+  // 6. Labels & Coordinate Axes
+  ctxTop.fillStyle = isLight ? '#475569' : '#94A3B8';
+  ctxTop.font = '8.5px IBM Plex Mono, monospace';
+  ctxTop.textAlign = 'center';
+
+  const m1End = Math.min(chPerMod, numCols);
+  const m2End = Math.min(chPerMod * 2, numCols);
+  ctxTop.fillText(`XS1 (D01-D${m1End < 10 ? '0' + m1End : m1End})`, plotX + (chPerMod * cellW) / 2, plotY - 6);
+  ctxTop.fillText(`XS2 (D${m1End + 1 < 10 ? '0' + (m1End + 1) : m1End + 1}-D${m2End < 10 ? '0' + m2End : m2End})`, plotX + (chPerMod + chPerMod / 2) * cellW, plotY - 6);
+  ctxTop.fillText(`XS3 (D${m2End + 1 < 10 ? '0' + (m2End + 1) : m2End + 1}-D${numCols})`, plotX + (2 * chPerMod + chPerMod / 2) * cellW, plotY - 6);
+
+  ctxTop.fillText(`X · Detectors (1–${numCols}) · Span: 800 cm`, plotX + plotW / 2, h - 8);
+
+  ctxTop.save();
+  ctxTop.translate(14, plotY + plotH / 2);
+  ctxTop.rotate(-Math.PI / 2);
+  ctxTop.fillText('Z · Height (cm)', 0, 0);
+  ctxTop.restore();
+
+  // Height labels on left axis
+  ctxTop.textAlign = 'right';
+  ctxTop.font = '8px IBM Plex Mono, monospace';
+  ctxTop.fillText(`B1 (${heightZCm(0)})`, plotX - 5, plotY + cellH / 2 + 3);
+  if (numRows > 1) {
+    ctxTop.fillText(`B${numRows} (${heightZCm(numRows - 1)})`, plotX - 5, plotY + plotH - cellH / 2 + 3);
+  }
+
+  // 7. Calculate Bayesian Estimated Source Marker Coordinates
+  const colPos = (src.centerCol !== undefined && Number.isFinite(src.centerCol))
+    ? src.centerCol
+    : (numCols > 1 ? (Number(src.x) / 800.0) * (numCols - 1) : (numCols - 1) / 2);
+  const rowPos = (src.centerRow !== undefined && Number.isFinite(src.centerRow))
+    ? src.centerRow
+    : ((Number(src.z) / 35.0) - 1);
+  const srcX = plotX + ((Math.max(0, Math.min(numCols - 1, colPos)) + 0.5) / numCols) * plotW;
+  const srcZ = plotY + ((Math.max(0, Math.min(numRows - 1, rowPos)) + 0.5) / numRows) * plotH;
+
+  // 8. Bayesian Covariance Uncertainty Ellipse (1-Sigma & 2-Sigma)
+  if (src.sigmaX && src.sigmaZ) {
+    const maxZ = Math.max(heightZCm(numRows - 1), (APP_STATE.totalHeights || numRows) * 35.0);
+    const rx = Math.max(8, (src.sigmaX / 800.0) * plotW * 1.5);
+    const ry = Math.max(6, (src.sigmaZ / maxZ) * plotH * 1.5);
+
+    // 2-Sigma Outer Ellipse (95% Credible Region)
+    ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.35)';
+    ctxTop.lineWidth = 1;
+    ctxTop.setLineDash([3, 2]);
+    ctxTop.beginPath();
+    ctxTop.ellipse(srcX, srcZ, rx * 1.5, ry * 1.5, 0, 0, Math.PI * 2);
+    ctxTop.stroke();
+
+    // 1-Sigma Inner Ellipse (68% Credible Region)
+    ctxTop.setLineDash([]);
+    ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.7)';
+    ctxTop.lineWidth = 1.25;
+    ctxTop.beginPath();
+    ctxTop.ellipse(srcX, srcZ, rx, ry, 0, 0, Math.PI * 2);
+    ctxTop.stroke();
+    ctxTop.fillStyle = 'rgba(239, 68, 68, 0.12)';
+    ctxTop.fill();
+  }
+
+  // 9. Precision Crosshair Lines
+  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+  ctxTop.lineWidth = 1.2;
   ctxTop.setLineDash([3, 3]);
   ctxTop.beginPath();
-  ctxTop.moveTo(padding, srcZ);
-  ctxTop.lineTo(w - padding, srcZ);
-  ctxTop.moveTo(srcX, padding);
-  ctxTop.lineTo(srcX, h - padding);
+  ctxTop.moveTo(plotX, srcZ);
+  ctxTop.lineTo(plotX + plotW, srcZ);
+  ctxTop.moveTo(srcX, plotY);
+  ctxTop.lineTo(srcX, plotY + plotH);
   ctxTop.stroke();
   ctxTop.setLineDash([]);
 
+  // 10. Glowing Target Marker Core
+  const pGlow = ctxTop.createRadialGradient(srcX, srcZ, 1, srcX, srcZ, 12);
+  pGlow.addColorStop(0, '#EF4444');
+  pGlow.addColorStop(0.5, 'rgba(239, 68, 68, 0.5)');
+  pGlow.addColorStop(1, 'rgba(239, 68, 68, 0)');
+  ctxTop.fillStyle = pGlow;
+  ctxTop.beginPath();
+  ctxTop.arc(srcX, srcZ, 12, 0, Math.PI * 2);
+  ctxTop.fill();
+
   ctxTop.fillStyle = '#EF4444';
   ctxTop.beginPath();
-  ctxTop.arc(srcX, srcZ, 5.5, 0, Math.PI * 2);
+  ctxTop.arc(srcX, srcZ, 4.5, 0, Math.PI * 2);
   ctxTop.fill();
-  ctxTop.strokeStyle = '#FFF';
+  ctxTop.strokeStyle = '#FFFFFF';
   ctxTop.lineWidth = 1.5;
   ctxTop.stroke();
+
+  // 11. Floating Precision Coordinate Badge Tag
+  const estXText = src.x !== undefined ? `${src.x} cm` : '--';
+  const estZText = src.z !== undefined ? `${src.z} cm` : '--';
+  const tagText = `X: ${estXText} · Z: ${estZText}`;
+
+  ctxTop.font = '7.5px IBM Plex Mono, monospace';
+  const tagW = ctxTop.measureText(tagText).width + 8;
+  const tagH = 14;
+  let tagX = srcX + 8;
+  let tagY = srcZ - 18;
+  if (tagX + tagW > plotX + plotW) tagX = srcX - tagW - 8;
+  if (tagY < plotY) tagY = srcZ + 8;
+
+  ctxTop.fillStyle = isLight ? 'rgba(255, 255, 255, 0.92)' : 'rgba(15, 23, 42, 0.88)';
+  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.6)';
+  ctxTop.lineWidth = 1;
+  ctxTop.beginPath();
+  ctxTop.roundRect(tagX, tagY, tagW, tagH, 3);
+  ctxTop.fill();
+  ctxTop.stroke();
+
+  ctxTop.fillStyle = isLight ? '#0F172A' : '#F8FAFC';
+  ctxTop.textAlign = 'left';
+  ctxTop.fillText(tagText, tagX + 4, tagY + 10);
+}
+
+// 9b. TOP VIEW INTERACTIVE MOUSE LISTENER
+const canvasTopEl = document.getElementById('canvasTopViewXZ');
+if (canvasTopEl) {
+  canvasTopEl.addEventListener('mousemove', (e) => {
+    const tooltip = document.getElementById('topViewTooltip');
+    if (!tooltip) return;
+
+    const rect = canvasTopEl.getBoundingClientRect();
+    const scaleX = canvasTopEl.width / rect.width;
+    const scaleY = canvasTopEl.height / rect.height;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
+
+    const padL = 48, padR = 14, padT = 20, padB = 26;
+    const plotW = canvasTopEl.width - padL - padR;
+    const plotH = canvasTopEl.height - padT - padB;
+
+    if (mouseX < padL || mouseX > padL + plotW || mouseY < padT || mouseY > padT + plotH) {
+      tooltip.style.display = 'none';
+      return;
+    }
+
+    const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
+      ? APP_STATE.matrixData[0].length
+      : (APP_STATE.totalChannels || 36);
+    const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 10);
+
+    const cellW = plotW / numCols;
+    const cellH = plotH / numRows;
+
+    const c = Math.max(0, Math.min(numCols - 1, Math.floor((mouseX - padL) / cellW)));
+    const r = Math.max(0, Math.min(numRows - 1, Math.floor((mouseY - padT) / cellH)));
+
+    const detNum = c + 1;
+    const chPerMod = Math.max(1, Math.ceil(numCols / 3));
+    let modName = 'XS1';
+    if (detNum > chPerMod && detNum <= chPerMod * 2) modName = 'XS2';
+    else if (detNum > chPerMod * 2) modName = 'XS3';
+
+    const blokNum = r + 1;
+    const xCm = detectorXCm(c, numCols).toFixed(1);
+    const zCm = heightZCm(r).toFixed(1);
+
+    const cpsVal = (APP_STATE.matrixData[r] && APP_STATE.matrixData[r][c] !== undefined)
+      ? `${APP_STATE.matrixData[r][c]} CPS`
+      : 'No Data';
+
+    const src = APP_STATE.estimatedSource || {};
+    const postGrid = src.posteriorGrid || null;
+    let probVal = '--';
+    if (postGrid && postGrid[r] && postGrid[r][c] !== undefined) {
+      probVal = (postGrid[r][c] * 100).toFixed(1) + '%';
+    }
+
+    let distVal = '--';
+    if (src.x !== undefined && src.z !== undefined) {
+      const dx = parseFloat(xCm) - src.x;
+      const dz = parseFloat(zCm) - src.z;
+      distVal = Math.sqrt(dx * dx + dz * dz).toFixed(1) + ' cm';
+    }
+
+    const tvtCh = document.getElementById('tvtChannel');
+    if (tvtCh) tvtCh.textContent = `Detector D${detNum < 10 ? '0' + detNum : detNum}`;
+    const tvtMod = document.getElementById('tvtModule');
+    if (tvtMod) tvtMod.textContent = modName;
+    const tvtCoords = document.getElementById('tvtCoords');
+    if (tvtCoords) tvtCoords.textContent = `${xCm} cm, ${zCm} cm`;
+    const tvtBlok = document.getElementById('tvtBlok');
+    if (tvtBlok) tvtBlok.textContent = `Blok ${blokNum < 10 ? '0' + blokNum : blokNum} (${zCm} cm)`;
+    const tvtCps = document.getElementById('tvtCps');
+    if (tvtCps) tvtCps.textContent = cpsVal;
+    const tvtProb = document.getElementById('tvtProb');
+    if (tvtProb) tvtProb.textContent = probVal;
+    const tvtDist = document.getElementById('tvtDist');
+    if (tvtDist) tvtDist.textContent = distVal;
+
+    tooltip.style.display = 'block';
+    tooltip.style.left = `${e.clientX - rect.left + 12}px`;
+    tooltip.style.top = `${e.clientY - rect.top + 12}px`;
+  });
+
+  canvasTopEl.addEventListener('mouseleave', () => {
+    const tooltip = document.getElementById('topViewTooltip');
+    if (tooltip) tooltip.style.display = 'none';
+  });
 }
 
 // 10. TOOLTIP & MOUSE INTERACTION
@@ -2561,6 +2959,7 @@ function changeColorPalette(palette) {
   APP_STATE.currentPalette = palette;
   updateColorbarGradient();
   renderMatrixHeatmap();
+  renderTopViewXZ();
 }
 
 function switchViewMode(mode) {
@@ -3364,6 +3763,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (val && val.matrix && val.object_name === APP_STATE.objectName && APP_STATE.isScanning) {
         if (val.last_updated) updateTimestampDisplay(val.last_updated, 'FIREBASE RTDB');
         APP_STATE.matrixData = val.matrix;
+        recompute3DSourceLocalization();
         renderMatrixHeatmap();
         render3DSourceViewport();
         renderTopViewXZ();
