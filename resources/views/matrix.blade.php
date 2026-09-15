@@ -1800,8 +1800,8 @@ function renderTopViewXZ() {
   ctxTop.fillStyle = isLight ? '#f8fafc' : '#03060E';
   ctxTop.fillRect(0, 0, w, h);
 
-  const padL = 76;
-  const padR = 20;
+  const padL = 92;
+  const padR = 18;
   const padT = 26;
   const padB = 34;
   const plotX = padL;
@@ -1941,12 +1941,12 @@ function renderTopViewXZ() {
 
   // Z Axis labels at left (Blok / Height)
   ctxTop.save();
-  ctxTop.translate(14, plotY + plotH / 2);
+  ctxTop.translate(13, plotY + plotH / 2);
   ctxTop.rotate(-Math.PI / 2);
   ctxTop.textAlign = 'center';
   ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
   ctxTop.font = '700 8.5px "IBM Plex Mono", monospace';
-  ctxTop.fillText('Z · Elevation (cm)', 0, 0);
+  ctxTop.fillText('Elevation (Z)', 0, 0);
   ctxTop.restore();
 
   ctxTop.textAlign = 'right';
@@ -1955,7 +1955,7 @@ function renderTopViewXZ() {
     const yCenter = plotY + (r + 0.5) * cellH;
     const bNum = r + 1;
     const zVal = heightZCm(r);
-    ctxTop.fillText(`B${bNum < 10 ? '0' + bNum : bNum} (${zVal}cm)`, plotX - 6, yCenter + 2.5);
+    ctxTop.fillText(`B${bNum < 10 ? '0' + bNum : bNum} (${zVal}cm)`, plotX - 8, yCenter + 2.5);
   }
 
   // Estimated Source Position from Bayesian Localization
@@ -2078,7 +2078,7 @@ if (canvasTopEl) {
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    const padL = 76, padR = 20, padT = 26, padB = 34;
+    const padL = 92, padR = 18, padT = 26, padB = 34;
     const plotW = (canvasTopEl.width / dpr) - padL - padR;
     const plotH = (canvasTopEl.height / dpr) - padT - padB;
 
