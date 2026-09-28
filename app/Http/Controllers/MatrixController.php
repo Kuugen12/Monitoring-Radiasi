@@ -272,17 +272,151 @@ class MatrixController extends Controller
     }
 
     /**
-     * API: Download or preview current heatmap_radiation_matrix.csv.
+     * API / Web: Download scan matrix data from TiDB Cloud database as CSV.
+     * Supports downloading all matrix data or filtered by object_name.
      */
-    public function downloadCsv()
+    public function downloadCsv(Request $request)
     {
-        $csvPath = base_path('heatmap_radiation_matrix.csv');
-        if (!file_exists($csvPath)) {
-            return response()->json(['error' => 'Matrix CSV file not generated yet.'], 404);
+        $objectFilter = $request->query('object_name');
+        $sessionFilter = $request->query('session_id');
+        $scope = $request->query('scope', 'all'); // 'all' or 'current'
+
+        $rows = [];
+        $source = 'tidb_cloud';
+
+        // 1. Ambil data dari TiDB Cloud (MySQL Connection)
+        try {
+            $query = DB::table('scan_matrix');
+
+            if ($scope !== 'all' && !empty($objectFilter) && $objectFilter !== 'ALL') {
+                $query->where('object_name', $objectFilter);
+            }
+
+            if (!empty($sessionFilter) && $sessionFilter !== 'ALL') {
+                $query->where('session_id', $sessionFilter);
+            }
+
+            $records = $query->orderBy('id', 'asc')->get();
+            if ($records->isNotEmpty()) {
+                $rows = $records->map(function ($item) {
+                    return (array) $item;
+                })->toArray();
+            }
+        } catch (\Exception $e) {
+            // 2. Fallback: SQLite lokal jika TiDB offline
+            $dbPath = base_path('arraydata.db');
+            if (file_exists($dbPath)) {
+                try {
+                    $sqlite = new \PDO("sqlite:" . $dbPath);
+                    $sqlite->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
+                    if ($scope !== 'all' && !empty($objectFilter) && $objectFilter !== 'ALL') {
+                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix WHERE object_name = :obj ORDER BY id ASC");
+                        $stmt->bindValue(':obj', $objectFilter);
+                    } else {
+                        $stmt = $sqlite->prepare("SELECT * FROM scan_matrix ORDER BY id ASC");
+                    }
+                    $stmt->execute();
+                    $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+                    $source = 'sqlite_local';
+                } catch (\Exception $ex) {}
+            }
         }
 
-        return response()->download($csvPath, 'heatmap_radiation_matrix_' . date('Ymd_His') . '.csv', [
-            'Content-Type' => 'text/csv',
+        if (empty($rows)) {
+            // Jika benar-benar kosong, coba fallback ke heatmap_radiation_matrix.csv jika ada
+            $csvPath = base_path('heatmap_radiation_matrix.csv');
+            if (file_exists($csvPath)) {
+                return response()->download($csvPath, 'scan_matrix_tidb_' . date('Ymd_His') . '.csv', [
+                    'Content-Type' => 'text/csv; charset=UTF-8',
+                ]);
+            }
+            return response()->json(['error' => 'Belum ada data scan di database TiDB untuk diunduh sebagai CSV.'], 404);
+        }
+
+        // Header CSV: Kolom metadata + 72 Nilai Detektor (Det_01 sampai Det_72)
+        $detectorHeaders = [];
+        for ($i = 1; $i <= 72; $i++) {
+            $detectorHeaders[] = 'Det_' . str_pad($i, 2, '0', STR_PAD_LEFT);
+        }
+
+        $headers = array_merge([
+            'id',
+            'timestamp',
+            'object_name',
+            'session_id',
+            'height_level',
+            'loop_index',
+            'total_loops',
+            'transition_delay',
+            'max_cps',
+            'avg_cps',
+        ], $detectorHeaders, [
+            'created_at',
+        ]);
+
+        $fileNamePrefix = ($scope === 'all' || empty($objectFilter) || $objectFilter === 'ALL')
+            ? 'scan_matrix_tidb_all'
+            : 'scan_matrix_tidb_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $objectFilter);
+
+        $fileName = $fileNamePrefix . '_' . date('Ymd_His') . '.csv';
+
+        $callback = function () use ($headers, $rows) {
+            $file = fopen('php://output', 'w');
+
+            // Output UTF-8 BOM untuk kompatibilitas Microsoft Excel Windows
+            fputs($file, "\xEF\xBB\xBF");
+
+            // Tulis Header Kolom
+            fputcsv($file, $headers);
+
+            // Tulis Data Baris
+            foreach ($rows as $row) {
+                // Parse detector array data
+                $detData = [];
+                if (!empty($row['detector_data'])) {
+                    $detData = is_array($row['detector_data']) ? $row['detector_data'] : json_decode($row['detector_data'], true);
+                }
+                if (empty($detData)) {
+                    $d1 = !empty($row['xs1_data']) ? (is_array($row['xs1_data']) ? $row['xs1_data'] : json_decode($row['xs1_data'], true)) : [];
+                    $d2 = !empty($row['xs2_data']) ? (is_array($row['xs2_data']) ? $row['xs2_data'] : json_decode($row['xs2_data'], true)) : [];
+                    $d3 = !empty($row['xs3_data']) ? (is_array($row['xs3_data']) ? $row['xs3_data'] : json_decode($row['xs3_data'], true)) : [];
+                    $detData = array_merge($d1 ?: [], $d2 ?: [], $d3 ?: []);
+                }
+
+                // 72 Nilai Detektor
+                $detValues = [];
+                for ($i = 0; $i < 72; $i++) {
+                    $detValues[] = isset($detData[$i]) ? (int)$detData[$i] : 0;
+                }
+
+                $rowValues = array_merge([
+                    $row['id'] ?? '',
+                    $row['timestamp'] ?? '',
+                    $row['object_name'] ?? '',
+                    $row['session_id'] ?? '',
+                    $row['height_level'] ?? 1,
+                    $row['loop_index'] ?? 1,
+                    $row['total_loops'] ?? 1,
+                    $row['transition_delay'] ?? 1.0,
+                    $row['max_cps'] ?? 0,
+                    $row['avg_cps'] ?? 0,
+                ], $detValues, [
+                    $row['created_at'] ?? '',
+                ]);
+
+                fputcsv($file, $rowValues);
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0',
         ]);
     }
 }

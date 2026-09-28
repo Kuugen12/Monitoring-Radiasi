@@ -15,5 +15,7 @@ class VerifyCsrfToken extends Middleware
         'matrix-data/*',
         'api/*',
         'api/matrix/*',
+        'login',
+        'register',
     ];
 }

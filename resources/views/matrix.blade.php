@@ -102,6 +102,18 @@
 
       <div class="btn-group-divider"></div>
 
+      <!-- TOMBOL UNDUH CSV DATA DARI TIDB CLOUD -->
+      <button class="btn-action btn-download-csv" id="btnDownloadCsv" onclick="downloadTidbCsv('all')" title="Unduh keseluruhan data scan matrix 72-detektor dari TiDB Cloud sebagai file CSV">
+        <svg id="csvBtnIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="8" y1="13" x2="16" y2="13"></line>
+          <line x1="8" y1="17" x2="16" y2="17"></line>
+          <polyline points="10 9 9 9 8 9"></polyline>
+        </svg>
+        <span id="csvBtnLabel">UNDUH CSV</span>
+      </button>
+
       <!-- TOMBOL SIMPAN HASIL (DOWNLOAD 3 PLOT ILMIAH TIAP PILIH OBJEK) -->
       <button class="btn-action btn-save-session btn-save-ready" id="btnSaveSession" onclick="saveScanSession()" title="Simpan dan unduh 3 gambar visualisasi ilmiah hasil scan dari TiDB Cloud">
         <svg id="saveBtnIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -2582,6 +2594,35 @@ function removeToast(toastId) {
       if (el && el.parentNode) el.parentNode.removeChild(el);
     }, 250);
   }
+}
+
+function downloadTidbCsv(scope = 'all') {
+  const btn = document.getElementById('btnDownloadCsv');
+  const label = document.getElementById('csvBtnLabel');
+  
+  if (btn) btn.disabled = true;
+  if (label) label.textContent = 'MENGUNDUH...';
+
+  const currentObj = (scope === 'all') ? 'ALL' : (APP_STATE.objectName || 'ALL');
+  const exportUrl = `{{ route('matrix.data.export_csv') }}?scope=${encodeURIComponent(scope)}&object_name=${encodeURIComponent(currentObj)}&t=${Date.now()}`;
+
+  logTerminal(`<span class="log-badge-sync">[CSV EXPORT]</span> Mengunduh keseluruhan data scan matrix dari TiDB Cloud...`);
+  showToast('info', 'Mengunduh CSV TiDB', 'Sedang mengambil keseluruhan data scan matrix 72-detektor dari TiDB Cloud...');
+
+  // Buat element link sementara untuk men-trigger unduhan file CSV
+  const link = document.createElement('a');
+  link.href = exportUrl;
+  link.setAttribute('download', '');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  setTimeout(() => {
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = 'UNDUH CSV';
+    logTerminal(`<span class="log-badge-ok">[CSV SELESAI]</span> File CSV data scan matrix TiDB Cloud berhasil diunduh.`);
+    showToast('success', 'CSV Berhasil Diunduh!', 'Data scan matrix 72-detektor dari TiDB Cloud berhasil diunduh.');
+  }, 1200);
 }
 
 function saveScanSession() {
