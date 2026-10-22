@@ -928,8 +928,12 @@ function recompute3DSourceLocalization() {
     bg = Math.max(0.5, sorted[Math.floor(sorted.length * 0.2)] || 1);
   }
 
-  // Local Hotspot Cluster Centroid around Peak (Peak-Focused Centroid)
-  // Evaluates cells with excess signal above background, weighted by spatial proximity to the radiation peak:
+  // Centroid of the Dark Radiation Region ("tengah-tengah daerah hitam")
+  // In the Plasma (Raspi GUI Inverted) colormap, cells appear visibly dark purple / black
+  // when their intensity exceeds ~50-55% of the dynamic range above background baseline.
+  const dynamicRange = Math.max(0, globalPeakCps - bg);
+  const darkThresh = bg + 0.52 * dynamicRange;
+
   let sumW = 0.0;
   let sumCol = 0.0;
   let sumRow = 0.0;
@@ -939,21 +943,20 @@ function recompute3DSourceLocalization() {
 
   for (let i = 0; i < observations.length; i++) {
     const obs = observations[i];
-    const dr = obs.r - peakRow;
-    const dc = obs.c - peakCol;
-    // Spatial proximity kernel centered at global peak (col width ~ 2, row height ~ 1.5)
-    const distWeight = Math.exp(-(dc * dc / (2 * 2.0 * 2.0) + dr * dr / (2 * 1.5 * 1.5)));
-    const excess = Math.max(0, obs.n - bg);
-    const w = Math.pow(excess, 2) * distWeight;
-
-    sumW += w;
-    sumCol += obs.c * w;
-    sumRow += obs.r * w;
-    sumX += obs.x * w;
-    sumY += obs.y * w;
-    sumZ += obs.z * w;
+    if (obs.n >= darkThresh) {
+      // Weight cells smoothly by how deep inside the dark hotspot they are
+      const w = Math.pow(obs.n - darkThresh, 1.2);
+      sumW += w;
+      sumCol += obs.c * w;
+      sumRow += obs.r * w;
+      sumX += obs.x * w;
+      sumY += obs.y * w;
+      sumZ += obs.z * w;
+    }
   }
 
+  // If there are multiple dark cells, the centroid accurately pinpoints the exact center
+  // of the dark zone; otherwise fallback to global peak coordinates.
   const centerCol = sumW > 0 ? Number((sumCol / sumW).toFixed(2)) : peakCol;
   const centerRow = sumW > 0 ? Number((sumRow / sumW).toFixed(2)) : peakRow;
   const estX = sumW > 0 ? Number((sumX / sumW).toFixed(1)) : Number(detectorXCm(peakCol, numCols).toFixed(1));
