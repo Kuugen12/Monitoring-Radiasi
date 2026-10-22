@@ -57,9 +57,6 @@
         </div>
       </div>
 
-      <div class="hud-chip">
-        <span>PORT:</span> <strong id="headerComPort">COM5</strong>
-      </div>
       <div class="hud-chip progress-chip">
         <span>Z-STEP:</span> <strong id="headerHeightProgress">0 / 10</strong>
       </div>
@@ -123,66 +120,6 @@
         </svg>
         <span id="saveBtnLabel">SIMPAN HASIL</span>
       </button>
-    </div>
-
-    <!-- Quick Parameter Controls -->
-    <div class="params-bar">
-      <div class="param-pill" title="Hardware Serial / COM Port selection">
-        <label for="inputComPort">COM:</label>
-        <select id="inputComPort" onchange="updateComPort(this.value)">
-          <option value="COM1">COM1</option>
-          <option value="COM2">COM2</option>
-          <option value="COM3">COM3</option>
-          <option value="COM4">COM4</option>
-          <option value="COM5" selected>COM5</option>
-          <option value="COM6">COM6</option>
-          <option value="COM7">COM7</option>
-          <option value="COM8">COM8</option>
-          <option value="COM9">COM9</option>
-          <option value="COM10">COM10</option>
-          <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
-          <option value="/dev/ttyACM0">/dev/ttyACM0</option>
-        </select>
-      </div>
-
-      <div class="param-pill" title="Total scanning height levels">
-        <label for="inputTotalHeight">Steps:</label>
-        <input type="number" id="inputTotalHeight" value="24" min="1" max="50" onchange="updateTotalHeights(this.value)">
-      </div>
-
-      <div class="param-pill" title="Jumlah loop per baris scan">
-        <label for="inputTotalLoops">Loops:</label>
-        <input type="number" id="inputTotalLoops" value="1" min="1" max="20" onchange="updateTotalLoops(this.value)">
-      </div>
-
-      <div class="param-pill" title="Lama delay transisi lift antar baris (detik)">
-        <label for="inputTransitionDelay">Delay:</label>
-        <input type="number" id="inputTransitionDelay" value="0.3" min="0" max="10" step="0.1" onchange="updateTransitionDelay(this.value)">
-        <span style="font-size:10px;color:var(--text-muted);">s</span>
-      </div>
-
-      <div class="param-pill" title="Sampling acquisition rate">
-        <label for="inputSamplingRate">Rate:</label>
-        <select id="inputSamplingRate" onchange="updateSamplingInterval(this.value)">
-          <option value="100" selected>10.0 Hz (Fast / 100ms)</option>
-          <option value="200">5.0 Hz (200ms)</option>
-          <option value="500">2.0 Hz (500ms)</option>
-          <option value="1000">1.0 Hz (1.0s)</option>
-        </select>
-      </div>
-
-      <div class="param-pill" title="Hotspot radiation threshold in CPS">
-        <label for="inputHotspotThreshold">Hotspot &gt;:</label>
-        <input type="number" id="inputHotspotThreshold" value="100" min="50" max="1000" onchange="updateThreshold(this.value)">
-        <span style="font-size:10px;color:var(--text-muted);">CPS</span>
-      </div>
-
-      <!-- Firebase Cloud Sync Switch -->
-      <div class="cloud-sync-pill active" id="fbSyncToggle" onclick="toggleFirebaseSync()" title="Realtime Firebase Database synchronization">
-        <div class="toggle-switch-dot"></div>
-        <span>Cloud Sync</span>
-        <span class="latency-tag" id="syncLatencyText">12ms</span>
-      </div>
     </div>
   </div>
 
@@ -313,23 +250,24 @@
         <div class="hud-spatial-card">
           <div class="spatial-head">
             <span>3D SOURCE POSITION</span>
-            <span class="badge-live">ISOMETRIC MODEL</span>
+            <span class="badge-live" id="badge3DMode" style="cursor:pointer;" title="Klik & seret untuk memutar 3D">KLIK &amp; SERET PUTAR</span>
           </div>
-          <div class="canvas-spatial-stage" id="container3D">
-            <canvas id="canvas3D" width="500" height="220"></canvas>
+          <div class="canvas-spatial-stage" id="container3D" style="position:relative;">
+            <canvas id="canvas3D" width="500" height="220" style="cursor:grab;" title="Klik & seret untuk memutar tampilan 3D, double-click untuk reset"></canvas>
+            <div style="position:absolute;bottom:4px;left:10px;font-size:9px;color:#5a6a8a;font-style:italic;pointer-events:none;">Klik &amp; seret untuk memutar</div>
           </div>
           <div class="spatial-hud-overlay">
             <div class="hud-stat-box">
               <div class="h-lbl">POS X</div>
-              <div class="h-val highlight" id="statPosX">27.3 cm</div>
+              <div class="h-val highlight" id="statPosX" style="color:#5fc9f8;">- cm</div>
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">POS Y</div>
-              <div class="h-val highlight" id="statPosY">-12.5 cm</div>
+              <div class="h-val highlight" id="statPosY" style="color:#5fc9f8;">- cm</div>
             </div>
             <div class="hud-stat-box">
               <div class="h-lbl">POS Z</div>
-              <div class="h-val highlight" id="statPosZ">15.0 cm</div>
+              <div class="h-val highlight" id="statPosZ" style="color:#5fc9f8;">- cm</div>
             </div>
           </div>
         </div>
@@ -337,8 +275,8 @@
         <!-- Top View X-Z Source Map & Info -->
         <div class="hud-spatial-card">
           <div class="spatial-head">
-            <span>Top-View Plane (X-Z) · TiDB Matrix</span>
-            <span class="badge-live" id="statConfidence">96.2% Confidence</span>
+            <span>TOP-VIEW PLANE (X-Z)</span>
+            <span class="badge-live" id="statConfidence" style="color:#7ee787;">-</span>
           </div>
           <div class="canvas-spatial-stage" id="containerTopView" style="position:relative;">
             <canvas id="canvasTopViewXZ" width="500" height="220"></canvas>
@@ -351,19 +289,19 @@
               <div class="tt-grid-info">
                 <div class="tt-stat-row">
                   <span>Height:</span>
-                  <span class="tt-val" id="tvtBlok">Blok 03 (15 cm)</span>
+                  <span class="tt-val" id="tvtBlok">Blok 01 (32.5 cm)</span>
                 </div>
                 <div class="tt-stat-row">
                   <span>Pos (X, Z):</span>
-                  <span class="tt-val" id="tvtCoords">27.3 cm, 15.0 cm</span>
+                  <span class="tt-val" id="tvtCoords">49.3 cm, 32.5 cm</span>
                 </div>
                 <div class="tt-stat-row">
                   <span>Counts:</span>
-                  <span class="tt-val" id="tvtCps" style="color:#fbbf24;font-weight:700;">122 CPS</span>
+                  <span class="tt-val" id="tvtCps" style="color:#fbbf24;font-weight:700;">258 CPS</span>
                 </div>
                 <div class="tt-stat-row">
-                  <span>Bayesian Prob:</span>
-                  <span class="tt-val" id="tvtProb" style="color:#34D399;font-weight:700;">38.4%</span>
+                  <span>Metode:</span>
+                  <span class="tt-val" id="tvtProb" style="color:#7ee787;font-weight:700;">Centroid*</span>
                 </div>
                 <div class="tt-stat-row">
                   <span>Dist to Source:</span>
@@ -375,15 +313,15 @@
           <div class="spatial-hud-overlay">
             <div class="hud-stat-box">
               <div class="h-lbl">CONFIDENCE</div>
-              <div class="h-val" id="statConfidenceVal" style="color:#34d399;">96.2%</div>
+              <div class="h-val" id="statConfidenceVal" style="color:#7ee787;">-</div>
             </div>
             <div class="hud-stat-box">
-              <div class="h-lbl">METHOD</div>
-              <div class="h-val" id="statMethod" style="color:#93c5fd;">Bayesian</div>
+              <div class="h-lbl">METODE</div>
+              <div class="h-val" id="statMethod" style="color:#7ee787;">Centroid*</div>
             </div>
             <div class="hud-stat-box">
-              <div class="h-lbl">PEAK DETECTOR</div>
-              <div class="h-val alert" id="statHotspotCount">XS3 (D06)</div>
+              <div class="h-lbl">PEAK</div>
+              <div class="h-val" id="statHotspotCount" style="color:#7ee787;">-</div>
             </div>
           </div>
         </div>
@@ -877,203 +815,139 @@ function isMatrixRowActive(rowIndex) {
   return APP_STATE.selectedLoops.has(rowIndex + 1);
 }
 
+// Physical dimensions & coordinate mapping matching Python GUI (60 x 25 x maxZ cm)
+const BOX_LENGTH_CM = 60.0; // X - panjang objek (arah loop)
+const BOX_WIDTH_CM = 25.0;  // Y - lebar objek (posisi S1=0, S2=12.5, S3=25)
+const CELL_SIZE_CM = 5.0;   // resolusi sel (5x5 cm)
+
+function loopToXCm(loopNo, totalLoops) {
+  const step = BOX_LENGTH_CM / Math.max(1, totalLoops);
+  return (loopNo - 0.5) * step;
+}
+
+function blockToZCm(blokNo, totalRows) {
+  // Blok 1 = paling atas (dekat totalHeight), blok berikutnya makin turun tiap 5cm
+  const boxH = Math.max(25.0, (totalRows || 7) * CELL_SIZE_CM);
+  return Math.max(0.0, boxH - (blokNo - 0.5) * CELL_SIZE_CM);
+}
+
+function sensorToYCm(sensorNameOrIdx) {
+  if (sensorNameOrIdx === 'S1' || sensorNameOrIdx === 0) return 0.0;
+  if (sensorNameOrIdx === 'S3' || sensorNameOrIdx === 2) return BOX_WIDTH_CM;
+  return BOX_WIDTH_CM / 2; // S2 = 12.5 cm (tengah)
+}
+
 function detectorXCm(col, numCols) {
-  return numCols > 1 ? (col / (numCols - 1)) * 60.0 : 30.0;
+  const totalLoops = Math.max(1, Math.round(numCols / 3));
+  const loopNo = Math.min(totalLoops, Math.floor(col / 3) + 1);
+  return loopToXCm(loopNo, totalLoops);
 }
 
-function heightZCm(row) {
-  return (row + 1) * 5.0;
+function heightZCm(row, totalRows) {
+  const rows = totalRows || (APP_STATE.matrixData ? APP_STATE.matrixData.length : 7);
+  return blockToZCm(row + 1, rows);
 }
 
+// Centroid Berbobot (Weighted Centroid) Source Localization matching Python GUI
 function recompute3DSourceLocalization() {
   if (!APP_STATE.matrixData || APP_STATE.matrixData.length === 0) return;
 
   const numRows = APP_STATE.matrixData.length;
-  const numCols = (APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0) ? APP_STATE.matrixData[0].length : 72;
+  const numCols = (APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
+    ? APP_STATE.matrixData[0].length
+    : 72;
 
-  const observations = [];
-  const values = [];
-  let globalPeakCps = -1;
-  let peakRow = 0;
-  let peakCol = 0;
+  const boxHeightCm = Math.max(25.0, numRows * CELL_SIZE_CM);
+  const totalLoops = Math.max(1, Math.round(numCols / 3));
+
+  let wx = 0.0, wy = 0.0, wz = 0.0, totalWeight = 0.0;
+  let peak = null; // { cps, x, y, z, sensor, loop, block, col, row }
+  const allPoints = [];
 
   for (let r = 0; r < numRows; r++) {
     const row = APP_STATE.matrixData[r];
     if (!row) continue;
-    const active = isMatrixRowActive(r);
+    const blokNo = r + 1;
+    const z = blockToZCm(blokNo, numRows);
+
     for (let c = 0; c < numCols; c++) {
-      const val = Number(row[c]) || 0;
-      if (active) {
-        observations.push({ r, c, n: val, x: detectorXCm(c, numCols), z: heightZCm(r) });
-        values.push(val);
-        if (val > globalPeakCps) {
-          globalPeakCps = val;
-          peakRow = r;
-          peakCol = c;
-        }
+      const cps = Math.max(0.0, Number(row[c]) || 0);
+      const loopNo = Math.min(totalLoops, Math.floor(c / 3) + 1);
+      const sIdx = c % 3;
+      const sensorName = ['S1', 'S2', 'S3'][sIdx];
+      const x = loopToXCm(loopNo, totalLoops);
+      const y = sensorToYCm(sIdx);
+
+      allPoints.push({ x, y, z, cps, sensor: sensorName, loop: loopNo, block: blokNo, col: c, row: r });
+
+      wx += x * cps;
+      wy += y * cps;
+      wz += z * cps;
+      totalWeight += cps;
+
+      if (!peak || cps > peak.cps) {
+        peak = { cps, x, y, z, sensor: sensorName, loop: loopNo, block: blokNo, col: c, row: r };
       }
     }
   }
 
-  if (globalPeakCps < 0) {
-    for (let r = 0; r < numRows; r++) {
-      const row = APP_STATE.matrixData[r];
-      if (!row) continue;
-      for (let c = 0; c < numCols; c++) {
-        const val = Number(row[c]) || 0;
-        observations.push({ r, c, n: val, x: detectorXCm(c, numCols), z: heightZCm(r) });
-        values.push(val);
-        if (val > globalPeakCps) {
-          globalPeakCps = val;
-          peakRow = r;
-          peakCol = c;
-        }
-      }
-    }
+  if (totalWeight <= 0 || !peak) {
+    const defZ = blockToZCm(1, numRows);
+    APP_STATE.estimatedSource = {
+      x: 30.0, y: 12.5, z: defZ,
+      confidence: '0.0',
+      method: 'Centroid*',
+      peakCps: 0,
+      peakCol: 0,
+      peakRow: 0,
+      allPoints: allPoints,
+      boxHeightCm: boxHeightCm,
+      totalLoops: totalLoops
+    };
+    return;
   }
 
-  if (globalPeakCps < 0) globalPeakCps = 0;
+  const estX = Number((wx / totalWeight).toFixed(1));
+  const estY = Number((wy / totalWeight).toFixed(1));
+  const estZ = Number((wz / totalWeight).toFixed(1));
 
-  let bg = 1;
-  if (values.length > 0) {
-    const sorted = values.slice().sort((a, b) => a - b);
-    bg = Math.max(0.5, sorted[Math.floor(sorted.length * 0.2)] || 1);
+  const avgCps = totalWeight / Math.max(1, allPoints.length);
+  let confidence = '0.0';
+  if (peak.cps > 0) {
+    confidence = Math.max(0.0, Math.min(99.0, (100.0 * (peak.cps - avgCps) / peak.cps))).toFixed(1);
   }
-
-  const sigmaX = Math.max(3.0, (numCols > 1 ? 60.0 / (numCols - 1) : 5.0) * 1.25);
-  const sigmaZ = 5.0 * 0.95;
-  const invVarX = 1 / (2 * sigmaX * sigmaX);
-  const invVarZ = 1 / (2 * sigmaZ * sigmaZ);
-
-  const hypThreshold = bg + 0.08 * Math.max(0, globalPeakCps - bg);
-  let hypotheses = observations.filter((o) => o.n >= hypThreshold);
-  if (hypotheses.length < 4) hypotheses = observations.slice();
-
-  const logL = new Array(hypotheses.length).fill(0);
-  let maxLogL = -Infinity;
-
-  for (let h = 0; h < hypotheses.length; h++) {
-    const src = hypotheses[h];
-    let g2 = 0;
-    let ng = 0;
-    const kernels = new Array(observations.length);
-
-    for (let i = 0; i < observations.length; i++) {
-      const det = observations[i];
-      const dx = det.x - src.x;
-      const dz = det.z - src.z;
-      const g = Math.exp(-(dx * dx * invVarX + dz * dz * invVarZ));
-      kernels[i] = g;
-      const excess = det.n - bg;
-      ng += excess * g;
-      g2 += g * g;
-    }
-
-    const S = g2 > 1e-12 ? Math.max(0, ng / g2) : 0;
-    let ll = 0;
-    for (let i = 0; i < observations.length; i++) {
-      const lambda = Math.max(1e-9, bg + S * kernels[i]);
-      ll += observations[i].n * Math.log(lambda) - lambda;
-    }
-    logL[h] = ll;
-    if (ll > maxLogL) maxLogL = ll;
-  }
-
-  const posterior = new Array(hypotheses.length);
-  let postSum = 0;
-  for (let h = 0; h < hypotheses.length; h++) {
-    const p = Math.exp(logL[h] - maxLogL);
-    posterior[h] = p;
-    postSum += p;
-  }
-  if (postSum <= 0) postSum = 1;
-  for (let h = 0; h < hypotheses.length; h++) posterior[h] /= postSum;
-
-  let meanCol = 0;
-  let meanRow = 0;
-  let meanX = 0;
-  let meanZ = 0;
-  let entropy = 0;
-  let mapIdx = 0;
-  let mapP = -1;
-  const posteriorGrid = Array.from({ length: numRows }, () => new Array(numCols).fill(0));
-
-  for (let h = 0; h < hypotheses.length; h++) {
-    const p = posterior[h];
-    const src = hypotheses[h];
-    meanCol += src.c * p;
-    meanRow += src.r * p;
-    meanX += src.x * p;
-    meanZ += src.z * p;
-    if (p > 1e-12) entropy -= p * Math.log(p);
-    if (p > mapP) {
-      mapP = p;
-      mapIdx = h;
-    }
-    posteriorGrid[src.r][src.c] = p;
-  }
-
-  let varX = 0;
-  let varZ = 0;
-  let covXZ = 0;
-  for (let h = 0; h < hypotheses.length; h++) {
-    const p = posterior[h];
-    const dx = hypotheses[h].x - meanX;
-    const dz = hypotheses[h].z - meanZ;
-    varX += p * dx * dx;
-    varZ += p * dz * dz;
-    covXZ += p * dx * dz;
-  }
-
-  const centerCol = hypotheses.length ? meanCol : peakCol;
-  const centerRow = hypotheses.length ? meanRow : peakRow;
-  const estX = Number((hypotheses.length ? meanX : detectorXCm(peakCol, numCols)).toFixed(1));
-  const estZ = Number((hypotheses.length ? meanZ : heightZCm(peakRow)).toFixed(1));
-  const estY = -12.5;
-
-  const nHyp = Math.max(2, hypotheses.length);
-  const concentration = 1 - (entropy / Math.log(nHyp));
-  const snr = globalPeakCps > bg ? (globalPeakCps - bg) / Math.max(bg, 1) : 0;
-  const snrTerm = Math.min(1, snr / 8);
-  const confidence = (60 + 28 * Math.max(0, Math.min(1, concentration)) + 11 * snrTerm).toFixed(1);
 
   APP_STATE.estimatedSource = {
     x: estX,
     y: estY,
     z: estZ,
     confidence: confidence,
-    method: 'Bayesian',
-    centerCol: centerCol,
-    centerRow: centerRow,
-    peakCol: peakCol,
-    peakRow: peakRow,
-    peakCps: globalPeakCps,
-    mapCol: hypotheses[mapIdx] ? hypotheses[mapIdx].c : peakCol,
-    mapRow: hypotheses[mapIdx] ? hypotheses[mapIdx].r : peakRow,
-    sigmaX: Math.sqrt(Math.max(varX, 1)),
-    sigmaZ: Math.sqrt(Math.max(varZ, 1)),
-    covXZ: covXZ,
-    posteriorGrid: posteriorGrid
+    method: 'Centroid*',
+    peak: peak,
+    peakCps: peak.cps,
+    peakCol: peak.col,
+    peakRow: peak.row,
+    avgCps: avgCps,
+    totalLoops: totalLoops,
+    boxHeightCm: boxHeightCm,
+    allPoints: allPoints
   };
 
   const spX = document.getElementById('statPosX');
-  if (spX) spX.textContent = `${estX} cm`;
+  if (spX) spX.textContent = `${estX.toFixed(1)} cm`;
   const spY = document.getElementById('statPosY');
-  if (spY) spY.textContent = `${estY} cm`;
+  if (spY) spY.textContent = `${estY.toFixed(1)} cm`;
   const spZ = document.getElementById('statPosZ');
-  if (spZ) spZ.textContent = `${estZ} cm`;
+  if (spZ) spZ.textContent = `${estZ.toFixed(1)} cm`;
+
   const sConf = document.getElementById('statConfidence');
   if (sConf) sConf.textContent = `${confidence}% Confidence`;
   const sConfV = document.getElementById('statConfidenceVal');
   if (sConfV) sConfV.textContent = `${confidence}%`;
   const sMethod = document.getElementById('statMethod');
-  if (sMethod) sMethod.textContent = 'Bayesian';
-
-  const peakDetectorNumber = peakCol + 1;
-  const modLabel = getColumnModuleName(peakCol);
-
+  if (sMethod) sMethod.textContent = 'Centroid*';
   const sHs = document.getElementById('statHotspotCount');
-  if (sHs) sHs.textContent = `${modLabel} (D${peakDetectorNumber < 10 ? '0' + peakDetectorNumber : peakDetectorNumber})`;
+  if (sHs && peak) sHs.textContent = `${peak.sensor} @ Blok${peak.block} (${peak.cps} cps)`;
 }
 
 // 5. HEATMAP CANVAS RENDERING ENGINE
@@ -1448,10 +1322,59 @@ function render8x9GridView(width, height) {
   ctx.textAlign = 'left';
 }
 
-// 8. 3D SOURCE POSITION VIEWPORT — Matching Gambar 3 (3D Isometric Grid, Axes & Shaded Sphere)
+// 8. 3D SOURCE POSITION VIEWPORT — Matching Python GUI (3D Box Wireframe + Scan Points + Shaded Source Sphere)
+const view3DState = {
+  rotX: 0.38,   // elevation / pitch (approx 22 deg)
+  rotY: -0.65,  // azimuth / yaw (approx -37 deg)
+  isDragging: false,
+  lastX: 0,
+  lastY: 0,
+  eventsBound: false
+};
+
+function init3DCanvasEvents() {
+  const canvas3D = document.getElementById('canvas3D');
+  if (!canvas3D || view3DState.eventsBound) return;
+  view3DState.eventsBound = true;
+
+  canvas3D.addEventListener('mousedown', (e) => {
+    view3DState.isDragging = true;
+    view3DState.lastX = e.clientX;
+    view3DState.lastY = e.clientY;
+    canvas3D.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!view3DState.isDragging) return;
+    const dx = e.clientX - view3DState.lastX;
+    const dy = e.clientY - view3DState.lastY;
+    view3DState.lastX = e.clientX;
+    view3DState.lastY = e.clientY;
+
+    view3DState.rotY += dx * 0.009;
+    view3DState.rotX = Math.max(-0.25, Math.min(1.45, view3DState.rotX + dy * 0.009));
+    render3DSourceViewport();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (view3DState.isDragging) {
+      view3DState.isDragging = false;
+      if (canvas3D) canvas3D.style.cursor = 'grab';
+    }
+  });
+
+  canvas3D.addEventListener('dblclick', () => {
+    view3DState.rotX = 0.38;
+    view3DState.rotY = -0.65;
+    render3DSourceViewport();
+  });
+}
+
 function render3DSourceViewport() {
   const canvas3D = document.getElementById('canvas3D');
   if (!canvas3D) return;
+  init3DCanvasEvents();
+
   const ctx3D = canvas3D.getContext('2d');
   const isLight = isLightMode();
 
@@ -1470,40 +1393,56 @@ function render3DSourceViewport() {
   const h = displayH;
 
   ctx3D.clearRect(0, 0, w, h);
-  // Dark 3D navy viewport background matching Gambar 3
-  ctx3D.fillStyle = isLight ? '#f8fafc' : '#040714';
+  // Dark 3D navy viewport background matching Python GUI (#0d1329)
+  ctx3D.fillStyle = isLight ? '#f8fafc' : '#0d1329';
   ctx3D.fillRect(0, 0, w, h);
 
-  // Dynamic max Z based on total height levels from TiDB (5 cm per level)
   const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 5);
-  const maxZAxis = Math.max(25.0, numRows * 5.0); // e.g. 25 cm for 5 rows
+  const maxZAxis = Math.max(25.0, numRows * CELL_SIZE_CM); // e.g. 35 cm for 7 rows
+  const Lx = BOX_LENGTH_CM; // 60.0 cm
+  const Ly = BOX_WIDTH_CM;  // 25.0 cm
+  const Lz = maxZAxis;
 
-  // 3D Isometric Projection Parameters (tuned to match Gambar 3 with 60x25x25 cm box)
-  const originX = 90;
-  const originY = 175;
-  const axisX_dx = 220, axisX_dy = 30;    // X goes right and slightly down (0 to 60 cm)
-  const axisY_dx = 140, axisY_dy = -35;   // Y goes right and up (depth: -25 to 0 cm)
-  const axisZ_dy = -125;                  // Z goes straight up (0 to 25 cm)
+  // 3D Center & Projection
+  const cx = Lx / 2; // 30.0
+  const cy = Ly / 2; // 12.5
+  const cz = Lz / 2;
 
-  const yMin = -25.0, yMax = 0.0;
+  const cosY = Math.cos(view3DState.rotY), sinY = Math.sin(view3DState.rotY);
+  const cosX = Math.cos(view3DState.rotX), sinX = Math.sin(view3DState.rotX);
+
+  const scale = Math.min((w - 100) / 72, (h - 45) / Math.max(30, Lz * 1.25)) * 1.15;
+  const screenCenterX = (w / 2) - 15;
+  const screenCenterY = (h / 2) + 12;
 
   function project3D(x, y, z) {
-    const normX = Math.max(0, Math.min(1, x / 60.0));
-    const normY = Math.max(0, Math.min(1, (y - yMin) / (yMax - yMin)));
-    const normZ = Math.max(0, Math.min(1, z / maxZAxis));
+    const dx = x - cx;
+    const dy = y - cy;
+    const dz = z - cz;
 
-    const px = originX + normX * axisX_dx + normY * axisY_dx;
-    const py = originY + normX * axisX_dy + normY * axisY_dy + normZ * axisZ_dy;
-    return { px, py };
+    // Yaw around Z
+    const x1 = dx * cosY - dy * sinY;
+    const y1 = dx * sinY + dy * cosY;
+    const z1 = dz;
+
+    // Pitch around X
+    const x2 = x1;
+    const y2 = y1 * cosX - z1 * sinX;
+    const z2 = y1 * sinX + z1 * cosX;
+
+    const px = screenCenterX + x2 * scale;
+    const py = screenCenterY - z2 * scale;
+    return { px, py, depth: y2 };
   }
 
-  // 1. Draw Floor Grid Plane (Z = 0)
-  const fl_c0 = project3D(0, yMin, 0);
-  const fl_c1 = project3D(60, yMin, 0);
-  const fl_c2 = project3D(60, yMax, 0);
-  const fl_c3 = project3D(0, yMax, 0);
+  // 1. Draw Pane Planes (Floor Z=0, Back Wall Y=Ly, Left Wall X=0)
+  // Floor (Z = 0)
+  const fl_c0 = project3D(0, 0, 0);
+  const fl_c1 = project3D(Lx, 0, 0);
+  const fl_c2 = project3D(Lx, Ly, 0);
+  const fl_c3 = project3D(0, Ly, 0);
 
-  ctx3D.fillStyle = isLight ? 'rgba(226, 232, 240, 0.5)' : 'rgba(15, 23, 42, 0.55)';
+  ctx3D.fillStyle = isLight ? 'rgba(226, 232, 240, 0.55)' : 'rgba(10, 15, 33, 0.7)';
   ctx3D.beginPath();
   ctx3D.moveTo(fl_c0.px, fl_c0.py);
   ctx3D.lineTo(fl_c1.px, fl_c1.py);
@@ -1513,32 +1452,26 @@ function render3DSourceViewport() {
   ctx3D.fill();
 
   // Floor grid lines
-  ctx3D.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.4)' : 'rgba(59, 130, 246, 0.18)';
-  ctx3D.lineWidth = 0.8;
-  for (let gx = 20; gx < 60; gx += 20) {
-    const pStart = project3D(gx, yMin, 0);
-    const pEnd = project3D(gx, yMax, 0);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pStart.px, pStart.py);
-    ctx3D.lineTo(pEnd.px, pEnd.py);
-    ctx3D.stroke();
+  ctx3D.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.35)' : 'rgba(58, 74, 112, 0.35)';
+  ctx3D.lineWidth = 0.7;
+  for (let gx = 20; gx < Lx; gx += 20) {
+    const pS = project3D(gx, 0, 0);
+    const pE = project3D(gx, Ly, 0);
+    ctx3D.beginPath(); ctx3D.moveTo(pS.px, pS.py); ctx3D.lineTo(pE.px, pE.py); ctx3D.stroke();
   }
-  for (let gy = -20; gy < yMax; gy += 5) {
-    const pStart = project3D(0, gy, 0);
-    const pEnd = project3D(60, gy, 0);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pStart.px, pStart.py);
-    ctx3D.lineTo(pEnd.px, pEnd.py);
-    ctx3D.stroke();
+  for (let gy = 12.5; gy < Ly; gy += 12.5) {
+    const pS = project3D(0, gy, 0);
+    const pE = project3D(Lx, gy, 0);
+    ctx3D.beginPath(); ctx3D.moveTo(pS.px, pS.py); ctx3D.lineTo(pE.px, pE.py); ctx3D.stroke();
   }
 
-  // 2. Draw Back Wall Grid Plane (Y = yMax)
-  const bw_c0 = project3D(0, yMax, 0);
-  const bw_c1 = project3D(60, yMax, 0);
-  const bw_c2 = project3D(60, yMax, maxZAxis);
-  const bw_c3 = project3D(0, yMax, maxZAxis);
+  // Back Wall (Y = Ly)
+  const bw_c0 = project3D(0, Ly, 0);
+  const bw_c1 = project3D(Lx, Ly, 0);
+  const bw_c2 = project3D(Lx, Ly, Lz);
+  const bw_c3 = project3D(0, Ly, Lz);
 
-  ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.35)' : 'rgba(11, 19, 43, 0.35)';
+  ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.35)' : 'rgba(8, 13, 28, 0.5)';
   ctx3D.beginPath();
   ctx3D.moveTo(bw_c0.px, bw_c0.py);
   ctx3D.lineTo(bw_c1.px, bw_c1.py);
@@ -1547,30 +1480,24 @@ function render3DSourceViewport() {
   ctx3D.closePath();
   ctx3D.fill();
 
-  for (let gx = 20; gx < 60; gx += 20) {
-    const pStart = project3D(gx, yMax, 0);
-    const pEnd = project3D(gx, yMax, maxZAxis);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pStart.px, pStart.py);
-    ctx3D.lineTo(pEnd.px, pEnd.py);
-    ctx3D.stroke();
+  for (let gx = 20; gx < Lx; gx += 20) {
+    const pS = project3D(gx, Ly, 0);
+    const pE = project3D(gx, Ly, Lz);
+    ctx3D.beginPath(); ctx3D.moveTo(pS.px, pS.py); ctx3D.lineTo(pE.px, pE.py); ctx3D.stroke();
   }
-  for (let gz = 5; gz < maxZAxis; gz += 5) {
-    const pStart = project3D(0, yMax, gz);
-    const pEnd = project3D(60, yMax, gz);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pStart.px, pStart.py);
-    ctx3D.lineTo(pEnd.px, pEnd.py);
-    ctx3D.stroke();
+  for (let gz = 10; gz < Lz; gz += 10) {
+    const pS = project3D(0, Ly, gz);
+    const pE = project3D(Lx, Ly, gz);
+    ctx3D.beginPath(); ctx3D.moveTo(pS.px, pS.py); ctx3D.lineTo(pE.px, pE.py); ctx3D.stroke();
   }
 
-  // 3. Draw Left Wall Grid Plane (X = 0)
-  const lw_c0 = project3D(0, yMin, 0);
-  const lw_c1 = project3D(0, yMax, 0);
-  const lw_c2 = project3D(0, yMax, maxZAxis);
-  const lw_c3 = project3D(0, yMin, maxZAxis);
+  // Left Wall (X = 0)
+  const lw_c0 = project3D(0, 0, 0);
+  const lw_c1 = project3D(0, Ly, 0);
+  const lw_c2 = project3D(0, Ly, Lz);
+  const lw_c3 = project3D(0, 0, Lz);
 
-  ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.45)' : 'rgba(15, 23, 42, 0.4)';
+  ctx3D.fillStyle = isLight ? 'rgba(241, 245, 249, 0.45)' : 'rgba(9, 14, 30, 0.55)';
   ctx3D.beginPath();
   ctx3D.moveTo(lw_c0.px, lw_c0.py);
   ctx3D.lineTo(lw_c1.px, lw_c1.py);
@@ -1579,133 +1506,131 @@ function render3DSourceViewport() {
   ctx3D.closePath();
   ctx3D.fill();
 
-  for (let gy = -20; gy < yMax; gy += 5) {
-    const pStart = project3D(0, gy, 0);
-    const pEnd = project3D(0, gy, maxZAxis);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pStart.px, pStart.py);
-    ctx3D.lineTo(pEnd.px, pEnd.py);
-    ctx3D.stroke();
+  for (let gy = 12.5; gy < Ly; gy += 12.5) {
+    const pS = project3D(0, gy, 0);
+    const pE = project3D(0, gy, Lz);
+    ctx3D.beginPath(); ctx3D.moveTo(pS.px, pS.py); ctx3D.lineTo(pE.px, pE.py); ctx3D.stroke();
   }
-  for (let gz = 5; gz < maxZAxis; gz += 5) {
-    const pStart = project3D(0, yMin, gz);
-    const pEnd = project3D(0, yMax, gz);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pStart.px, pStart.py);
-    ctx3D.lineTo(pEnd.px, pEnd.py);
-    ctx3D.stroke();
+  for (let gz = 10; gz < Lz; gz += 10) {
+    const pS = project3D(0, 0, gz);
+    const pE = project3D(0, Ly, gz);
+    ctx3D.beginPath(); ctx3D.moveTo(pS.px, pS.py); ctx3D.lineTo(pE.px, pE.py); ctx3D.stroke();
   }
 
-  // 4. Primary 3D Axes Lines & Ticks (matching Gambar 3)
-  ctx3D.strokeStyle = isLight ? 'rgba(51, 65, 85, 0.75)' : 'rgba(147, 197, 253, 0.6)';
-  ctx3D.lineWidth = 1.3;
+  // 2. Draw 12 Wireframe Box Edges (matching Python GUI: color="#3a4a70", linewidth=0.9, alpha=0.7)
+  const corners3D = [
+    project3D(0, 0, 0),    // 0
+    project3D(0, 0, Lz),   // 1
+    project3D(0, Ly, 0),   // 2
+    project3D(0, Ly, Lz),  // 3
+    project3D(Lx, 0, 0),   // 4
+    project3D(Lx, 0, Lz),  // 5
+    project3D(Lx, Ly, 0),  // 6
+    project3D(Lx, Ly, Lz)  // 7
+  ];
 
-  // Z Axis
-  ctx3D.beginPath();
-  ctx3D.moveTo(lw_c0.px, lw_c0.py);
-  ctx3D.lineTo(lw_c3.px, lw_c3.py);
-  ctx3D.stroke();
+  const edges = [
+    [0, 1], [0, 2], [0, 4], [1, 3], [1, 5], [2, 3],
+    [2, 6], [3, 7], [4, 5], [4, 6], [5, 7], [6, 7]
+  ];
 
-  // X Axis
-  ctx3D.beginPath();
-  ctx3D.moveTo(fl_c0.px, fl_c0.py);
-  ctx3D.lineTo(fl_c1.px, fl_c1.py);
-  ctx3D.stroke();
+  ctx3D.strokeStyle = isLight ? 'rgba(71, 85, 105, 0.7)' : 'rgba(58, 74, 112, 0.85)';
+  ctx3D.lineWidth = 1.0;
+  for (let i = 0; i < edges.length; i++) {
+    const pA = corners3D[edges[i][0]];
+    const pB = corners3D[edges[i][1]];
+    ctx3D.beginPath();
+    ctx3D.moveTo(pA.px, pA.py);
+    ctx3D.lineTo(pB.px, pB.py);
+    ctx3D.stroke();
+  }
 
-  // Y Axis
-  ctx3D.beginPath();
-  ctx3D.moveTo(fl_c1.px, fl_c1.py);
-  ctx3D.lineTo(fl_c2.px, fl_c2.py);
-  ctx3D.stroke();
-
-  // Top / back box boundary lines
-  ctx3D.strokeStyle = isLight ? 'rgba(148, 163, 184, 0.4)' : 'rgba(59, 130, 246, 0.25)';
-  ctx3D.lineWidth = 0.8;
-  ctx3D.beginPath();
-  ctx3D.moveTo(bw_c3.px, bw_c3.py);
-  ctx3D.lineTo(bw_c2.px, bw_c2.py);
-  ctx3D.lineTo(fl_c2.px, fl_c2.py);
-  ctx3D.moveTo(lw_c3.px, lw_c3.py);
-  ctx3D.lineTo(bw_c3.px, bw_c3.py);
-  ctx3D.stroke();
-
-  // Axis Labels & Ticks Text
-  ctx3D.fillStyle = isLight ? '#475569' : '#94A3B8';
+  // 3. Axes Ticks & Labels
+  ctx3D.fillStyle = isLight ? '#475569' : '#8ea0c4';
   ctx3D.font = '700 8.5px "IBM Plex Mono", monospace';
+
+  // Z-Axis Ticks (0, 10, 20, 30...)
   ctx3D.textAlign = 'right';
-
-  // Z-Axis Ticks: 0, 5, 10, 15, 20, 25 cm
-  for (let gz = 0; gz <= maxZAxis; gz += 5) {
-    const pt = project3D(0, yMin, gz);
-    ctx3D.fillText(`${gz}`, pt.px - 6, pt.py + 3);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pt.px - 3, pt.py);
-    ctx3D.lineTo(pt.px, pt.py);
-    ctx3D.stroke();
+  for (let gz = 0; gz <= Lz; gz += 10) {
+    const pt = project3D(0, 0, gz);
+    ctx3D.fillText(`${gz}`, pt.px - 5, pt.py + 3);
   }
-
-  // Z-Axis Title (rotated)
+  const zMid = project3D(0, 0, Lz / 2);
   ctx3D.save();
-  const zMid = project3D(0, yMin, maxZAxis / 2);
-  ctx3D.translate(zMid.px - 30, zMid.py);
+  ctx3D.translate(zMid.px - 22, zMid.py);
   ctx3D.rotate(-Math.PI / 2);
   ctx3D.textAlign = 'center';
-  ctx3D.font = '700 9px "IBM Plex Mono", monospace';
-  ctx3D.fillText('Z (cm)', 0, 0);
+  ctx3D.fillText('Z - tinggi (cm)', 0, 0);
   ctx3D.restore();
 
-  // X-Axis Ticks: 0, 20, 40, 60
+  // X-Axis Ticks (0, 20, 40, 60)
   ctx3D.textAlign = 'center';
-  ctx3D.font = '700 8.5px "IBM Plex Mono", monospace';
-  const xTicks = [0, 20, 40, 60];
-  xTicks.forEach(gx => {
-    const pt = project3D(gx, yMin, 0);
+  [0, 20, 40, 60].forEach(gx => {
+    const pt = project3D(gx, 0, 0);
     ctx3D.fillText(`${gx}`, pt.px, pt.py + 13);
-    ctx3D.beginPath();
-    ctx3D.moveTo(pt.px, pt.py);
-    ctx3D.lineTo(pt.px, pt.py + 3);
-    ctx3D.stroke();
   });
+  const xMid = project3D(30, 0, 0);
+  ctx3D.fillText('X - panjang (cm)', xMid.px, xMid.py + 24);
 
-  // X-Axis Title
-  const xMid = project3D(30, yMin, 0);
-  ctx3D.fillText('X (cm)', xMid.px, xMid.py + 25);
-
-  // Y-Axis Ticks: -25, -12.5, 0
+  // Y-Axis Ticks (0, 12.5, 25)
   ctx3D.textAlign = 'left';
-  const yTicks = [-25, -12.5, 0];
-  yTicks.forEach(gy => {
-    const pt = project3D(60, gy, 0);
-    ctx3D.fillText(`${gy}`, pt.px + 6, pt.py + 3);
+  [0, 12.5, 25].forEach(gy => {
+    const pt = project3D(Lx, gy, 0);
+    ctx3D.fillText(`${gy}`, pt.px + 5, pt.py + 3);
   });
+  const yMid = project3D(Lx, 12.5, 0);
+  ctx3D.fillText('Y - lebar (cm)', yMid.px + 12, yMid.py + 14);
 
-  // Y-Axis Title
-  const yMid = project3D(60, -12.5, 0);
-  ctx3D.fillText('Y (cm)', yMid.px + 14, yMid.py + 14);
+  // 4. Draw 3D Scan Data Points (colored with plasma_r by CPS, matching Python GUI ax.scatter)
+  let dynamicMax = APP_STATE.objectMaxCps || 0;
+  if (dynamicMax <= 0 && APP_STATE.matrixData) {
+    APP_STATE.matrixData.forEach(row => {
+      if (row) row.forEach(v => { const num = Number(v) || 0; if (num > dynamicMax) dynamicMax = num; });
+    });
+  }
+  if (dynamicMax <= 0) dynamicMax = 250;
 
-  // 5. Active Elevator Scanning Bar at Current Height Step
-  const curH = Math.max(1, APP_STATE.currentHeight || numRows);
-  const curZ = curH * 5;
-  const barStart = project3D(0, 0, curZ);
-  const barEnd = project3D(60, 0, curZ);
-  ctx3D.strokeStyle = isLight ? 'rgba(5, 150, 105, 0.7)' : 'rgba(52, 211, 153, 0.65)';
-  ctx3D.lineWidth = 2;
-  ctx3D.beginPath();
-  ctx3D.moveTo(barStart.px, barStart.py);
-  ctx3D.lineTo(barEnd.px, barEnd.py);
-  ctx3D.stroke();
+  const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
+    ? APP_STATE.matrixData[0].length
+    : 72;
+  const totalLoops = Math.max(1, Math.round(numCols / 3));
 
-  // 6. Estimated Source Position 3D Sphere (Matching Gambar 3!)
-  const src = APP_STATE.estimatedSource || { x: 27.3, y: -12.5, z: 15.0 };
+  if (APP_STATE.matrixData && APP_STATE.matrixData.length > 0) {
+    for (let r = 0; r < APP_STATE.matrixData.length; r++) {
+      const row = APP_STATE.matrixData[r];
+      if (!row) continue;
+      const blokNo = r + 1;
+      const z = blockToZCm(blokNo, numRows);
+
+      for (let c = 0; c < numCols; c++) {
+        const cps = Math.max(0.0, Number(row[c]) || 0);
+        const loopNo = Math.min(totalLoops, Math.floor(c / 3) + 1);
+        const sIdx = c % 3;
+        const x = loopToXCm(loopNo, totalLoops);
+        const y = sensorToYCm(sIdx);
+
+        const pt = project3D(x, y, z);
+        ctx3D.fillStyle = getColorForValue(cps, dynamicMax);
+        ctx3D.globalAlpha = 0.55;
+        ctx3D.beginPath();
+        ctx3D.arc(pt.px, pt.py, 2.6, 0, Math.PI * 2);
+        ctx3D.fill();
+      }
+    }
+    ctx3D.globalAlpha = 1.0;
+  }
+
+  // 5. Estimated Source Position — Big Red Shaded Sphere at (sx, sy, sz)
+  const src = APP_STATE.estimatedSource || {};
   const estX = (Number(src.x) !== undefined && !isNaN(src.x)) ? Number(src.x) : 30.0;
-  const estY = (Number(src.y) !== undefined && !isNaN(src.y)) ? Number(src.y) : -12.5;
-  const estZ = (Number(src.z) !== undefined && !isNaN(src.z)) ? Number(src.z) : 15.0;
+  const estY = (Number(src.y) !== undefined && !isNaN(src.y)) ? Number(src.y) : 12.5;
+  const estZ = (Number(src.z) !== undefined && !isNaN(src.z)) ? Number(src.z) : (Lz - 2.5);
 
   const pSrc = project3D(estX, estY, estZ);
   const pBase = project3D(estX, estY, 0);
 
-  // Vertical drop projection dashed line to floor
-  ctx3D.strokeStyle = 'rgba(239, 68, 68, 0.45)';
+  // Vertical drop projection dashed line to floor (matching Python GUI ax.plot([sx,sx], [sy,sy], [sz,0], color="#ff6b6b", linestyle="--"))
+  ctx3D.strokeStyle = 'rgba(255, 107, 107, 0.75)';
   ctx3D.lineWidth = 1.2;
   ctx3D.setLineDash([3, 3]);
   ctx3D.beginPath();
@@ -1714,24 +1639,24 @@ function render3DSourceViewport() {
   ctx3D.stroke();
   ctx3D.setLineDash([]);
 
-  // Floor drop shadow ellipse
-  ctx3D.fillStyle = 'rgba(239, 68, 68, 0.22)';
+  // Floor drop shadow ellipse (matching Python GUI ax.scatter([sx], [sy], [0], c="#ff6b6b", s=60, alpha=0.35))
+  ctx3D.fillStyle = 'rgba(255, 107, 107, 0.4)';
   ctx3D.beginPath();
-  ctx3D.ellipse(pBase.px, pBase.py, 12, 5, 0, 0, Math.PI * 2);
+  ctx3D.ellipse(pBase.px, pBase.py, 10, 4.5, 0, 0, Math.PI * 2);
   ctx3D.fill();
 
   // Soft ambient radiation glow aura
-  const radius = 14;
+  const radius = 13;
   const auraGlow = ctx3D.createRadialGradient(pSrc.px, pSrc.py, 2, pSrc.px, pSrc.py, radius * 2.2);
-  auraGlow.addColorStop(0, 'rgba(239, 68, 68, 0.4)');
-  auraGlow.addColorStop(0.5, 'rgba(245, 158, 11, 0.15)');
+  auraGlow.addColorStop(0, 'rgba(255, 59, 48, 0.45)');
+  auraGlow.addColorStop(0.5, 'rgba(245, 158, 11, 0.18)');
   auraGlow.addColorStop(1, 'rgba(239, 68, 68, 0)');
   ctx3D.fillStyle = auraGlow;
   ctx3D.beginPath();
   ctx3D.arc(pSrc.px, pSrc.py, radius * 2.2, 0, Math.PI * 2);
   ctx3D.fill();
 
-  // Render Realistic 3D Shaded Sphere (matching Gambar 3 specular highlight)
+  // Render Realistic 3D Shaded Sphere (matching Python GUI ax.scatter([sx], [sy], [sz], c="#ff3b30", s=420, edgecolors="#ffb3ac"))
   const sphereGrad = ctx3D.createRadialGradient(
     pSrc.px - radius * 0.35,
     pSrc.py - radius * 0.35,
@@ -1741,9 +1666,9 @@ function render3DSourceViewport() {
     radius
   );
   sphereGrad.addColorStop(0.0, '#FFFFFF'); // Specular highlight glint
-  sphereGrad.addColorStop(0.2, '#FFA4A4'); // Soft bright highlight
-  sphereGrad.addColorStop(0.5, '#EF4444'); // Core red
-  sphereGrad.addColorStop(0.8, '#991B1B'); // Shaded deep red
+  sphereGrad.addColorStop(0.25, '#FFB3AC'); // Soft bright highlight
+  sphereGrad.addColorStop(0.55, '#FF3B30'); // Core bright red
+  sphereGrad.addColorStop(0.82, '#B91C1C'); // Shaded deep red
   sphereGrad.addColorStop(1.0, '#450A0A'); // Shadowed bottom rim
 
   ctx3D.fillStyle = sphereGrad;
@@ -1751,13 +1676,40 @@ function render3DSourceViewport() {
   ctx3D.arc(pSrc.px, pSrc.py, radius, 0, Math.PI * 2);
   ctx3D.fill();
 
-  // Subtle outer edge stroke
-  ctx3D.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx3D.lineWidth = 1;
+  // Highlight outer ring
+  ctx3D.strokeStyle = 'rgba(255, 179, 172, 0.85)';
+  ctx3D.lineWidth = 1.3;
   ctx3D.stroke();
+
+  // 6. Mini Colorbar on Right Side (matching matplotlib cbar in Python GUI)
+  const cbX = w - 24;
+  const cbY = 24;
+  const cbW = 7;
+  const cbH = h - 56;
+
+  const cbGrad = ctx3D.createLinearGradient(0, cbY, 0, cbY + cbH);
+  for (let step = 0; step <= 10; step++) {
+    const fraction = step / 10;
+    // Invert top-to-bottom so high CPS is at the top of colorbar
+    const val = (1 - fraction) * dynamicMax;
+    cbGrad.addColorStop(fraction, getColorForValue(val, dynamicMax));
+  }
+  ctx3D.fillStyle = cbGrad;
+  ctx3D.fillRect(cbX, cbY, cbW, cbH);
+  ctx3D.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+  ctx3D.lineWidth = 0.8;
+  ctx3D.strokeRect(cbX, cbY, cbW, cbH);
+
+  ctx3D.fillStyle = '#8ea0c4';
+  ctx3D.font = '600 7.5px "IBM Plex Mono", monospace';
+  ctx3D.textAlign = 'center';
+  ctx3D.fillText('CPS', cbX + cbW / 2, cbY - 5);
+  ctx3D.textAlign = 'right';
+  ctx3D.fillText(`${Math.round(dynamicMax)}`, cbX - 4, cbY + 7);
+  ctx3D.fillText('0', cbX - 4, cbY + cbH);
 }
 
-// 9. TOP VIEW X-Z — TiDB matrix heatmap + Bayesian posterior marker
+// 9. TOP VIEW X-Z — Spatial matrix matching Python GUI
 function renderTopViewXZ() {
   const canvasTop = document.getElementById('canvasTopViewXZ');
   if (!canvasTop) return;
@@ -1779,12 +1731,12 @@ function renderTopViewXZ() {
   const h = displayH;
 
   ctxTop.clearRect(0, 0, w, h);
-  ctxTop.fillStyle = isLight ? '#f8fafc' : '#03060E';
+  ctxTop.fillStyle = isLight ? '#f8fafc' : '#0d1329';
   ctxTop.fillRect(0, 0, w, h);
 
   const padL = 92;
   const padR = 18;
-  const padT = 26;
+  const padT = 24;
   const padB = 34;
   const plotX = padL;
   const plotY = padT;
@@ -1792,10 +1744,10 @@ function renderTopViewXZ() {
   const plotH = h - padT - padB;
 
   const matrix = APP_STATE.matrixData || [];
-  const numRows = Math.max(1, matrix.length || APP_STATE.totalHeights || 10);
+  const numRows = Math.max(1, matrix.length || APP_STATE.totalHeights || 7);
   const numCols = (matrix[0] && matrix[0].length > 0)
     ? matrix[0].length
-    : (APP_STATE.totalChannels || 36);
+    : (APP_STATE.totalChannels || 72);
 
   let dynamicMax = APP_STATE.objectMaxCps || 0;
   for (let r = 0; r < matrix.length; r++) {
@@ -1806,26 +1758,17 @@ function renderTopViewXZ() {
       if (v > dynamicMax) dynamicMax = v;
     }
   }
-  if (dynamicMax <= 0) dynamicMax = 17;
+  if (dynamicMax <= 0) dynamicMax = 250;
 
   const cellW = plotW / numCols;
   const cellH = plotH / numRows;
-  const src = APP_STATE.estimatedSource || {};
-  const posteriorGrid = src.posteriorGrid || null;
-  let maxPost = 0;
-  if (posteriorGrid) {
-    for (let r = 0; r < posteriorGrid.length; r++) {
-      for (let c = 0; c < (posteriorGrid[r] || []).length; c++) {
-        if (posteriorGrid[r][c] > maxPost) maxPost = posteriorGrid[r][c];
-      }
-    }
-  }
+  const maxZ = Math.max(25.0, numRows * CELL_SIZE_CM);
 
   // Draw Grid background lines
-  ctxTop.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(255, 255, 255, 0.04)';
+  ctxTop.strokeStyle = isLight ? 'rgba(0, 0, 0, 0.05)' : 'rgba(58, 74, 112, 0.2)';
   ctxTop.lineWidth = 1;
-  const gridStepX = plotW / 8;
-  const gridStepY = plotH / 5;
+  const gridStepX = plotW / 6;
+  const gridStepY = plotH / Math.min(numRows, 7);
   for (let gx = plotX; gx <= plotX + plotW; gx += gridStepX) {
     ctxTop.beginPath();
     ctxTop.moveTo(gx, plotY);
@@ -1839,7 +1782,7 @@ function renderTopViewXZ() {
     ctxTop.stroke();
   }
 
-  // Draw Heatmap Cells from TiDB Matrix
+  // Draw Heatmap Cells (Top row r = 0 is Blok 1 at highest Z, Bottom row is latest Blok at lowest Z)
   for (let r = 0; r < numRows; r++) {
     const row = matrix[r];
     const active = isMatrixRowActive(r);
@@ -1853,35 +1796,26 @@ function renderTopViewXZ() {
       } else {
         ctxTop.fillStyle = getColorForValue(val, dynamicMax);
       }
-      ctxTop.globalAlpha = active ? 0.92 : 0.28;
+      ctxTop.globalAlpha = active ? 0.95 : 0.25;
       ctxTop.fillRect(x, y, cellW, cellH);
 
-      // Subtle cell borders
-      ctxTop.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 0, 0, 0.25)';
+      ctxTop.strokeStyle = isLight ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.28)';
       ctxTop.lineWidth = 0.5;
       ctxTop.strokeRect(x, y, cellW, cellH);
-
-      // Bayesian posterior probability glow overlay
-      if (posteriorGrid && maxPost > 0 && posteriorGrid[r] && posteriorGrid[r][c] > 0) {
-        const probNorm = posteriorGrid[r][c] / maxPost;
-        const alpha = 0.15 + 0.55 * probNorm;
-        ctxTop.fillStyle = `rgba(239, 68, 68, ${alpha})`;
-        ctxTop.fillRect(x, y, cellW, cellH);
-      }
     }
   }
   ctxTop.globalAlpha = 1;
 
   // Plot Stage Border
-  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.5)' : 'rgba(59, 130, 246, 0.55)';
+  ctxTop.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.5)' : '#2a3550';
   ctxTop.lineWidth = 1.2;
   ctxTop.strokeRect(plotX, plotY, plotW, plotH);
 
   // Axis Labels & Ticks
-  ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
+  ctxTop.fillStyle = isLight ? '#64748B' : '#8ea0c4';
   ctxTop.font = '700 8.5px "IBM Plex Mono", monospace';
   ctxTop.textAlign = 'center';
-  ctxTop.fillText('X · Detector Channel Array (0 – 60 cm)', plotX + plotW / 2, h - 6);
+  ctxTop.fillText('X - Panjang Objek (0 – 60 cm)', plotX + plotW / 2, h - 6);
 
   // X Axis distance ticks
   ctxTop.font = '700 8px "IBM Plex Mono", monospace';
@@ -1891,14 +1825,14 @@ function renderTopViewXZ() {
   ctxTop.fillText('40 cm', plotX + (2 * plotW) / 3, plotY + plotH + 13);
   ctxTop.fillText('60 cm', plotX + plotW, plotY + plotH + 13);
 
-  // Z Axis labels at left (Blok / Height)
+  // Z Axis labels at left (Blok 1 is at highest elevation at the top, Blok N at bottom)
   ctxTop.save();
   ctxTop.translate(13, plotY + plotH / 2);
   ctxTop.rotate(-Math.PI / 2);
   ctxTop.textAlign = 'center';
-  ctxTop.fillStyle = isLight ? '#64748B' : '#94A3B8';
+  ctxTop.fillStyle = isLight ? '#64748B' : '#8ea0c4';
   ctxTop.font = '700 8.5px "IBM Plex Mono", monospace';
-  ctxTop.fillText('Elevation (Z)', 0, 0);
+  ctxTop.fillText(`Z - Tinggi (0 – ${Math.round(maxZ)} cm)`, 0, 0);
   ctxTop.restore();
 
   ctxTop.textAlign = 'right';
@@ -1906,50 +1840,21 @@ function renderTopViewXZ() {
   for (let r = 0; r < numRows; r++) {
     const yCenter = plotY + (r + 0.5) * cellH;
     const bNum = r + 1;
-    const zVal = heightZCm(r);
-    ctxTop.fillText(`B${bNum < 10 ? '0' + bNum : bNum} (${zVal}cm)`, plotX - 8, yCenter + 2.5);
+    const zVal = blockToZCm(bNum, numRows);
+    ctxTop.fillText(`B${bNum < 10 ? '0' + bNum : bNum} (${zVal.toFixed(1)}cm)`, plotX - 8, yCenter + 2.5);
   }
 
-  // Estimated Source Position from Bayesian Localization
-  const maxZ = Math.max(heightZCm(numRows - 1), numRows * 5.0);
-  const colPos = (src.centerCol !== undefined && Number.isFinite(src.centerCol))
-    ? src.centerCol
-    : (numCols > 1 ? (Number(src.x || 30.0) / 60.0) * (numCols - 1) : (numCols - 1) / 2);
-  const rowPos = (src.centerRow !== undefined && Number.isFinite(src.centerRow))
-    ? src.centerRow
-    : ((Number(src.z || 15.0) / 5.0) - 1);
+  // Estimated Source Position Crosshairs & Reticle (matching Python GUI ax.axhline, ax.axvline, ax.scatter)
+  const src = APP_STATE.estimatedSource || {};
+  const estXVal = (src && src.x !== undefined && !isNaN(src.x)) ? Number(src.x) : 30.0;
+  const estZVal = (src && src.z !== undefined && !isNaN(src.z)) ? Number(src.z) : (maxZ - 2.5);
 
-  const srcX = plotX + ((Math.max(0, Math.min(numCols - 1, colPos)) + 0.5) / numCols) * plotW;
-  const srcZ = plotY + ((Math.max(0, Math.min(numRows - 1, rowPos)) + 0.5) / numRows) * plotH;
+  const srcX = plotX + (Math.max(0, Math.min(60.0, estXVal)) / 60.0) * plotW;
+  const srcZ = plotY + (1 - (Math.max(0, Math.min(maxZ, estZVal)) / maxZ)) * plotH;
 
-  // Bayesian Uncertainty Ellipse & Soft Radial Halo
-  const sigX = src.sigmaX || 6.0;
-  const sigZ = src.sigmaZ || 5.0;
-  const rx = Math.max(8, (sigX / 60.0) * plotW * 1.4);
-  const ry = Math.max(8, (sigZ / maxZ) * plotH * 1.4);
-
-  // Soft Radial Bayesian Halo
-  const aura = ctxTop.createRadialGradient(srcX, srcZ, 2, srcX, srcZ, Math.max(rx, ry) * 1.8);
-  aura.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
-  aura.addColorStop(0.5, 'rgba(245, 158, 11, 0.15)');
-  aura.addColorStop(1, 'rgba(239, 68, 68, 0)');
-  ctxTop.fillStyle = aura;
-  ctxTop.beginPath();
-  ctxTop.arc(srcX, srcZ, Math.max(rx, ry) * 1.8, 0, Math.PI * 2);
-  ctxTop.fill();
-
-  // 1-Sigma Confidence Ellipse (68% Credible Region)
-  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.65)';
-  ctxTop.lineWidth = 1.3;
-  ctxTop.beginPath();
-  ctxTop.ellipse(srcX, srcZ, rx, ry, 0, 0, Math.PI * 2);
-  ctxTop.stroke();
-  ctxTop.fillStyle = 'rgba(239, 68, 68, 0.08)';
-  ctxTop.fill();
-
-  // Red Dashed Crosshair Lines (full plot width & height)
-  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.85)';
-  ctxTop.lineWidth = 1.4;
+  // Red Dashed Crosshair Lines across whole plot (matching Python GUI ax.axhline(pz, color="#ff6b6b"), ax.axvline(px))
+  ctxTop.strokeStyle = 'rgba(255, 107, 107, 0.75)';
+  ctxTop.lineWidth = 1.2;
   ctxTop.setLineDash([4, 3]);
 
   ctxTop.beginPath();
@@ -1960,36 +1865,32 @@ function renderTopViewXZ() {
   ctxTop.stroke();
   ctxTop.setLineDash([]);
 
-  // Glowing Target Marker Reticle
-  const markerGlow = ctxTop.createRadialGradient(srcX, srcZ, 2, srcX, srcZ, 12);
-  markerGlow.addColorStop(0, '#EF4444');
-  markerGlow.addColorStop(0.6, 'rgba(239, 68, 68, 0.5)');
-  markerGlow.addColorStop(1, 'rgba(239, 68, 68, 0)');
-  ctxTop.fillStyle = markerGlow;
+  // Soft Radial Halo
+  const aura = ctxTop.createRadialGradient(srcX, srcZ, 2, srcX, srcZ, 18);
+  aura.addColorStop(0, 'rgba(255, 59, 48, 0.4)');
+  aura.addColorStop(0.5, 'rgba(245, 158, 11, 0.15)');
+  aura.addColorStop(1, 'rgba(255, 59, 48, 0)');
+  ctxTop.fillStyle = aura;
   ctxTop.beginPath();
-  ctxTop.arc(srcX, srcZ, 12, 0, Math.PI * 2);
+  ctxTop.arc(srcX, srcZ, 18, 0, Math.PI * 2);
   ctxTop.fill();
 
-  // Solid Red Target Dot
-  ctxTop.fillStyle = '#EF4444';
+  // Target Reticle Ring (matching Python GUI ax.scatter([px], [pz], s=90, edgecolors="#ff3b30", linewidths=1.8))
+  ctxTop.strokeStyle = '#ff3b30';
+  ctxTop.lineWidth = 1.8;
   ctxTop.beginPath();
-  ctxTop.arc(srcX, srcZ, 5.5, 0, Math.PI * 2);
-  ctxTop.fill();
-  ctxTop.strokeStyle = '#FFFFFF';
-  ctxTop.lineWidth = 1.5;
+  ctxTop.arc(srcX, srcZ, 8, 0, Math.PI * 2);
   ctxTop.stroke();
 
   // Center white pinpoint
   ctxTop.fillStyle = '#FFFFFF';
   ctxTop.beginPath();
-  ctxTop.arc(srcX, srcZ, 1.8, 0, Math.PI * 2);
+  ctxTop.arc(srcX, srcZ, 2.2, 0, Math.PI * 2);
   ctxTop.fill();
 
   // Floating Precision Coordinate Badge Tag
-  const estXVal = src.x !== undefined ? src.x : 27.3;
-  const estZVal = src.z !== undefined ? src.z : 15.0;
-  const peakDet = (src.peakCol !== undefined ? src.peakCol + 1 : 1);
-  const tagText = `X: ${estXVal} cm · Z: ${estZVal} cm (Peak: ${src.peakCps || 0} CPS @ D${peakDet < 10 ? '0' + peakDet : peakDet})`;
+  const peakText = src.peak ? `${src.peak.sensor} @ Blok${src.peak.block} (${src.peak.cps} CPS)` : `${src.peakCps || 0} CPS`;
+  const tagText = `X: ${estXVal.toFixed(1)} cm · Z: ${estZVal.toFixed(1)} cm (Peak: ${peakText})`;
 
   ctxTop.font = '700 7.5px "IBM Plex Mono", monospace';
   const tagW = ctxTop.measureText(tagText).width + 10;
@@ -1999,8 +1900,8 @@ function renderTopViewXZ() {
   if (tagX + tagW > plotX + plotW) tagX = srcX - tagW - 8;
   if (tagY < plotY + 2) tagY = srcZ + 8;
 
-  ctxTop.fillStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(11, 19, 43, 0.92)';
-  ctxTop.strokeStyle = 'rgba(239, 68, 68, 0.65)';
+  ctxTop.fillStyle = isLight ? 'rgba(255, 255, 255, 0.95)' : 'rgba(13, 19, 41, 0.92)';
+  ctxTop.strokeStyle = 'rgba(255, 107, 107, 0.7)';
   ctxTop.lineWidth = 1;
   ctxTop.beginPath();
   if (ctxTop.roundRect) {
@@ -2011,7 +1912,7 @@ function renderTopViewXZ() {
   ctxTop.fill();
   ctxTop.stroke();
 
-  ctxTop.fillStyle = isLight ? '#0F172A' : '#F8FAFC';
+  ctxTop.fillStyle = isLight ? '#0F172A' : '#7ee787';
   ctxTop.textAlign = 'left';
   ctxTop.fillText(tagText, tagX + 5, tagY + 10.5);
 }
@@ -2030,7 +1931,7 @@ if (canvasTopEl) {
     const mouseX = (e.clientX - rect.left) * scaleX;
     const mouseY = (e.clientY - rect.top) * scaleY;
 
-    const padL = 92, padR = 18, padT = 26, padB = 34;
+    const padL = 92, padR = 18, padT = 24, padB = 34;
     const plotW = (canvasTopEl.width / dpr) - padL - padR;
     const plotH = (canvasTopEl.height / dpr) - padT - padB;
 
@@ -2041,8 +1942,8 @@ if (canvasTopEl) {
 
     const numCols = (APP_STATE.matrixData.length > 0 && APP_STATE.matrixData[0] && APP_STATE.matrixData[0].length > 0)
       ? APP_STATE.matrixData[0].length
-      : (APP_STATE.totalChannels || 36);
-    const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 10);
+      : (APP_STATE.totalChannels || 72);
+    const numRows = Math.max(1, APP_STATE.matrixData.length || APP_STATE.totalHeights || 7);
 
     const cellW = plotW / numCols;
     const cellH = plotH / numRows;
@@ -2051,23 +1952,21 @@ if (canvasTopEl) {
     const r = Math.max(0, Math.min(numRows - 1, Math.floor((mouseY - padT) / cellH)));
 
     const detNum = c + 1;
-    const modName = getDetectorModuleName(detNum, true);
+    const sIdx = c % 3;
+    const sensorName = ['S1', 'S2', 'S3'][sIdx];
+    const modName = `XS${sIdx + 1} (${sensorName})`;
 
     const blokNum = r + 1;
-    const xCm = detectorXCm(c, numCols).toFixed(1);
-    const zCm = heightZCm(r).toFixed(1);
+    const totalLoops = Math.max(1, Math.round(numCols / 3));
+    const loopNo = Math.min(totalLoops, Math.floor(c / 3) + 1);
+    const xCm = loopToXCm(loopNo, totalLoops).toFixed(1);
+    const zCm = blockToZCm(blokNum, numRows).toFixed(1);
 
     const cpsVal = (APP_STATE.matrixData[r] && APP_STATE.matrixData[r][c] !== undefined)
       ? `${APP_STATE.matrixData[r][c]} CPS`
       : 'No Data';
 
     const src = APP_STATE.estimatedSource || {};
-    const postGrid = src.posteriorGrid || null;
-    let probVal = '--';
-    if (postGrid && postGrid[r] && postGrid[r][c] !== undefined) {
-      probVal = (postGrid[r][c] * 100).toFixed(1) + '%';
-    }
-
     let distVal = '--';
     if (src.x !== undefined && src.z !== undefined) {
       const dx = parseFloat(xCm) - src.x;
@@ -2076,7 +1975,7 @@ if (canvasTopEl) {
     }
 
     const tvtCh = document.getElementById('tvtChannel');
-    if (tvtCh) tvtCh.textContent = `Detector D${detNum < 10 ? '0' + detNum : detNum}`;
+    if (tvtCh) tvtCh.textContent = `Loop ${loopNo} · Sensor ${sensorName}`;
     const tvtMod = document.getElementById('tvtModule');
     if (tvtMod) tvtMod.textContent = modName;
     const tvtBlok = document.getElementById('tvtBlok');
@@ -2086,7 +1985,7 @@ if (canvasTopEl) {
     const tvtCps = document.getElementById('tvtCps');
     if (tvtCps) tvtCps.textContent = cpsVal;
     const tvtProb = document.getElementById('tvtProb');
-    if (tvtProb) tvtProb.textContent = probVal;
+    if (tvtProb) tvtProb.textContent = 'Centroid*';
     const tvtDist = document.getElementById('tvtDist');
     if (tvtDist) tvtDist.textContent = distVal;
 
@@ -2979,10 +2878,10 @@ function toggleFirebaseSync() {
   APP_STATE.useFirebase = !APP_STATE.useFirebase;
   const toggleEl = document.getElementById('fbSyncToggle');
   if (APP_STATE.useFirebase) {
-    toggleEl.classList.add('active');
+    if (toggleEl) toggleEl.classList.add('active');
     logTerminal('<span class="log-badge-ok">[FIREBASE]</span> Realtime Cloud Sync On.');
   } else {
-    toggleEl.classList.remove('active');
+    if (toggleEl) toggleEl.classList.remove('active');
     logTerminal('<span class="log-badge-warn">[FIREBASE]</span> Offline Mode (Local).');
   }
 }

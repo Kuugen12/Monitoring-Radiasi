@@ -402,7 +402,7 @@ html.light-mode .hud-object-select {
   padding: 10px 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
   flex-wrap: wrap;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
@@ -1427,7 +1427,7 @@ html.light-mode .matrix-raw-table tr.row-unselected td {
 
 .canvas-spatial-stage {
   position: relative;
-  background: #03060e;
+  background: #0d1329;
   width: 100%;
 }
 
