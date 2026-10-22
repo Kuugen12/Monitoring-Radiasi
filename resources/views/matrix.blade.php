@@ -838,9 +838,7 @@ function sensorToYCm(sensorNameOrIdx) {
 }
 
 function detectorXCm(col, numCols) {
-  const totalLoops = Math.max(1, Math.round(numCols / 3));
-  const loopNo = Math.min(totalLoops, Math.floor(col / 3) + 1);
-  return loopToXCm(loopNo, totalLoops);
+  return numCols > 1 ? (col / (numCols - 1)) * BOX_LENGTH_CM : (BOX_LENGTH_CM / 2);
 }
 
 function heightZCm(row, totalRows) {
@@ -848,7 +846,7 @@ function heightZCm(row, totalRows) {
   return blockToZCm(row + 1, rows);
 }
 
-// Centroid Berbobot (Weighted Centroid) Source Localization matching Python GUI
+// Peak-Focused Bayesian & Centroid Source Localization matching Python GUI & 2D Heatmap Hotspot
 function recompute3DSourceLocalization() {
   if (!APP_STATE.matrixData || APP_STATE.matrixData.length === 0) return;
 
@@ -860,8 +858,11 @@ function recompute3DSourceLocalization() {
   const boxHeightCm = Math.max(25.0, numRows * CELL_SIZE_CM);
   const totalLoops = Math.max(1, Math.round(numCols / 3));
 
-  let wx = 0.0, wy = 0.0, wz = 0.0, totalWeight = 0.0;
-  let peak = null; // { cps, x, y, z, sensor, loop, block, col, row }
+  const observations = [];
+  const values = [];
+  let globalPeakCps = -1;
+  let peakRow = 0;
+  let peakCol = 0;
   const allPoints = [];
 
   for (let r = 0; r < numRows; r++) {
@@ -869,53 +870,105 @@ function recompute3DSourceLocalization() {
     if (!row) continue;
     const blokNo = r + 1;
     const z = blockToZCm(blokNo, numRows);
+    const active = isMatrixRowActive(r);
 
     for (let c = 0; c < numCols; c++) {
       const cps = Math.max(0.0, Number(row[c]) || 0);
       const loopNo = Math.min(totalLoops, Math.floor(c / 3) + 1);
       const sIdx = c % 3;
       const sensorName = ['S1', 'S2', 'S3'][sIdx];
-      const x = loopToXCm(loopNo, totalLoops);
+      const x = detectorXCm(c, numCols);
       const y = sensorToYCm(sIdx);
 
       allPoints.push({ x, y, z, cps, sensor: sensorName, loop: loopNo, block: blokNo, col: c, row: r });
 
-      wx += x * cps;
-      wy += y * cps;
-      wz += z * cps;
-      totalWeight += cps;
-
-      if (!peak || cps > peak.cps) {
-        peak = { cps, x, y, z, sensor: sensorName, loop: loopNo, block: blokNo, col: c, row: r };
+      if (active) {
+        observations.push({ r, c, n: cps, x, y, z, sensor: sensorName, loop: loopNo, block: blokNo });
+        values.push(cps);
+        if (cps > globalPeakCps) {
+          globalPeakCps = cps;
+          peakRow = r;
+          peakCol = c;
+        }
       }
     }
   }
 
-  if (totalWeight <= 0 || !peak) {
-    const defZ = blockToZCm(1, numRows);
-    APP_STATE.estimatedSource = {
-      x: 30.0, y: 12.5, z: defZ,
-      confidence: '0.0',
-      method: 'Centroid*',
-      peakCps: 0,
-      peakCol: 0,
-      peakRow: 0,
-      allPoints: allPoints,
-      boxHeightCm: boxHeightCm,
-      totalLoops: totalLoops
-    };
-    return;
+  // Fallback if no active rows selected
+  if (globalPeakCps < 0 || observations.length === 0) {
+    for (let r = 0; r < numRows; r++) {
+      const row = APP_STATE.matrixData[r];
+      if (!row) continue;
+      const blokNo = r + 1;
+      const z = blockToZCm(blokNo, numRows);
+      for (let c = 0; c < numCols; c++) {
+        const cps = Math.max(0.0, Number(row[c]) || 0);
+        const loopNo = Math.min(totalLoops, Math.floor(c / 3) + 1);
+        const sIdx = c % 3;
+        const sensorName = ['S1', 'S2', 'S3'][sIdx];
+        const x = detectorXCm(c, numCols);
+        const y = sensorToYCm(sIdx);
+        observations.push({ r, c, n: cps, x, y, z, sensor: sensorName, loop: loopNo, block: blokNo });
+        values.push(cps);
+        if (cps > globalPeakCps) {
+          globalPeakCps = cps;
+          peakRow = r;
+          peakCol = c;
+        }
+      }
+    }
   }
 
-  const estX = Number((wx / totalWeight).toFixed(1));
-  const estY = Number((wy / totalWeight).toFixed(1));
-  const estZ = Number((wz / totalWeight).toFixed(1));
+  if (globalPeakCps < 0) globalPeakCps = 0;
 
-  const avgCps = totalWeight / Math.max(1, allPoints.length);
+  // Robust background estimation (20th percentile)
+  let bg = 1;
+  if (values.length > 0) {
+    const sorted = values.slice().sort((a, b) => a - b);
+    bg = Math.max(0.5, sorted[Math.floor(sorted.length * 0.2)] || 1);
+  }
+
+  // Local Hotspot Cluster Centroid around Peak (Peak-Focused Centroid)
+  // Evaluates cells with excess signal above background, weighted by spatial proximity to the radiation peak:
+  let sumW = 0.0;
+  let sumCol = 0.0;
+  let sumRow = 0.0;
+  let sumX = 0.0;
+  let sumY = 0.0;
+  let sumZ = 0.0;
+
+  for (let i = 0; i < observations.length; i++) {
+    const obs = observations[i];
+    const dr = obs.r - peakRow;
+    const dc = obs.c - peakCol;
+    // Spatial proximity kernel centered at global peak (col width ~ 2, row height ~ 1.5)
+    const distWeight = Math.exp(-(dc * dc / (2 * 2.0 * 2.0) + dr * dr / (2 * 1.5 * 1.5)));
+    const excess = Math.max(0, obs.n - bg);
+    const w = Math.pow(excess, 2) * distWeight;
+
+    sumW += w;
+    sumCol += obs.c * w;
+    sumRow += obs.r * w;
+    sumX += obs.x * w;
+    sumY += obs.y * w;
+    sumZ += obs.z * w;
+  }
+
+  const centerCol = sumW > 0 ? Number((sumCol / sumW).toFixed(2)) : peakCol;
+  const centerRow = sumW > 0 ? Number((sumRow / sumW).toFixed(2)) : peakRow;
+  const estX = sumW > 0 ? Number((sumX / sumW).toFixed(1)) : Number(detectorXCm(peakCol, numCols).toFixed(1));
+  const estZ = sumW > 0 ? Number((sumZ / sumW).toFixed(1)) : Number(blockToZCm(peakRow + 1, numRows).toFixed(1));
+  const estY = sumW > 0 ? Number((sumY / sumW).toFixed(1)) : Number(sensorToYCm(peakCol % 3).toFixed(1));
+
+  const totalPointsCount = Math.max(1, observations.length);
+  const avgCps = values.reduce((acc, v) => acc + v, 0) / totalPointsCount;
   let confidence = '0.0';
-  if (peak.cps > 0) {
-    confidence = Math.max(0.0, Math.min(99.0, (100.0 * (peak.cps - avgCps) / peak.cps))).toFixed(1);
+  if (globalPeakCps > 0) {
+    confidence = Math.max(0.0, Math.min(99.0, (100.0 * (globalPeakCps - avgCps) / globalPeakCps))).toFixed(1);
   }
+
+  const peakSensor = ['S1', 'S2', 'S3'][peakCol % 3];
+  const peakLoop = Math.min(totalLoops, Math.floor(peakCol / 3) + 1);
 
   APP_STATE.estimatedSource = {
     x: estX,
@@ -923,14 +976,25 @@ function recompute3DSourceLocalization() {
     z: estZ,
     confidence: confidence,
     method: 'Centroid*',
-    peak: peak,
-    peakCps: peak.cps,
-    peakCol: peak.col,
-    peakRow: peak.row,
-    avgCps: avgCps,
+    centerCol: centerCol,
+    centerRow: centerRow,
+    peakCol: peakCol,
+    peakRow: peakRow,
+    peakCps: globalPeakCps,
+    peak: {
+      cps: globalPeakCps,
+      x: estX,
+      y: estY,
+      z: estZ,
+      sensor: peakSensor,
+      block: peakRow + 1,
+      loop: peakLoop,
+      col: peakCol,
+      row: peakRow
+    },
+    allPoints: allPoints,
     totalLoops: totalLoops,
-    boxHeightCm: boxHeightCm,
-    allPoints: allPoints
+    boxHeightCm: boxHeightCm
   };
 
   const spX = document.getElementById('statPosX');
@@ -947,7 +1011,7 @@ function recompute3DSourceLocalization() {
   const sMethod = document.getElementById('statMethod');
   if (sMethod) sMethod.textContent = 'Centroid*';
   const sHs = document.getElementById('statHotspotCount');
-  if (sHs && peak) sHs.textContent = `${peak.sensor} @ Blok${peak.block} (${peak.cps} cps)`;
+  if (sHs) sHs.textContent = `${peakSensor} @ Blok${peakRow + 1} (${globalPeakCps} cps)`;
 }
 
 // 5. HEATMAP CANVAS RENDERING ENGINE
@@ -1146,15 +1210,18 @@ function renderContourView(width, height) {
   if (APP_STATE.estimatedSource && APP_STATE.estimatedSource.centerCol !== undefined) {
     centerCol = APP_STATE.estimatedSource.centerCol;
     centerRow = APP_STATE.estimatedSource.centerRow;
+  } else if (APP_STATE.estimatedSource && APP_STATE.estimatedSource.peakCol !== undefined) {
+    centerCol = APP_STATE.estimatedSource.peakCol;
+    centerRow = APP_STATE.estimatedSource.peakRow;
   } else if (APP_STATE.estimatedSource) {
     centerCol = (APP_STATE.estimatedSource.x / 60.0) * (numCols - 1);
-    centerRow = (APP_STATE.estimatedSource.z / 5.0) - 1;
+    centerRow = 0;
   }
 
   const normC = numCols > 1 ? (Math.max(0, Math.min(numCols - 1, centerCol)) / (numCols - 1)) : 0.5;
   const normR = numRows > 1 ? (Math.max(0, Math.min(numRows - 1, centerRow)) / (numRows - 1)) : 0.5;
-  const cx = normC * width;
-  const cy = normR * height;
+  const cx = Math.max(18, Math.min(width - 18, normC * width));
+  const cy = Math.max(18, Math.min(height - 18, normR * height));
 
   // Draw glowing red hotspot locator target
   ctx.save();
@@ -1606,7 +1673,7 @@ function render3DSourceViewport() {
         const cps = Math.max(0.0, Number(row[c]) || 0);
         const loopNo = Math.min(totalLoops, Math.floor(c / 3) + 1);
         const sIdx = c % 3;
-        const x = loopToXCm(loopNo, totalLoops);
+        const x = detectorXCm(c, numCols);
         const y = sensorToYCm(sIdx);
 
         const pt = project3D(x, y, z);
