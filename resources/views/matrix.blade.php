@@ -327,52 +327,99 @@
         </div>
       </div>
 
-      <!-- Real-Time Metric Telemetry KPI Deck -->
+      <!-- Real-Time Metric Telemetry KPI Deck (matching RPM Vehicle PRIS style) -->
       <div class="telemetry-cards-row">
         <div class="kpi-tile kpi-channels">
-          <div class="kpi-header">Total Channels</div>
-          <div class="kpi-number" id="metricTotalChannels">72 <span class="kpi-unit">Ch</span></div>
-          <div class="kpi-subtext">3x Xiao Modules</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Total Channels</span>
+            <span class="kpi-status-dot"></span>
+          </div>
+          <div class="kpi-number" id="metricTotalChannels">12 <span class="kpi-unit">Ch</span></div>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer">
+            <span class="kpi-subtext">3x Xiao Modules</span>
+            <span class="kpi-subtext-meta">XS1–XS3</span>
+          </div>
         </div>
 
         <div class="kpi-tile kpi-loop">
-          <div class="kpi-header">Active Step</div>
-          <div class="kpi-number" id="metricActiveLoop">10 <span class="kpi-unit">/ 10</span></div>
-          <div class="kpi-subtext" id="metricElapsedTimer">Elapsed: 00:01:24</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Active Step</span>
+            <span class="kpi-status-dot"></span>
+          </div>
+          <div class="kpi-number" id="metricActiveLoop">7 <span class="kpi-unit">/ 7</span></div>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer">
+            <span class="kpi-subtext" id="metricElapsedTimer">Elapsed: 00:01:24</span>
+            <span class="kpi-subtext-meta">STEP</span>
+          </div>
         </div>
 
         <div class="kpi-tile kpi-peak">
-          <div class="kpi-header">Peak Intensity</div>
-          <div class="kpi-number" id="metricMaxCps">3245 <span class="kpi-unit">cps</span></div>
-          <div class="kpi-subtext" id="metricMaxChannel">Detector D06 (XS3)</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Peak Intensity</span>
+            <span class="kpi-status-dot"></span>
+          </div>
+          <div class="kpi-number" id="metricMaxCps">590 <span class="kpi-unit">cps</span></div>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer">
+            <span class="kpi-subtext" id="metricMaxChannel">Detector D07 (XS1)</span>
+            <span class="kpi-subtext-meta">MAX</span>
+          </div>
         </div>
 
         <div class="kpi-tile kpi-avg">
-          <div class="kpi-header">Average CPS</div>
-          <div class="kpi-number" id="metricAvgCps">174.2 <span class="kpi-unit">cps</span></div>
-          <div class="kpi-subtext" id="metricStdDev">Std Dev: 61.2</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Average CPS</span>
+            <span class="kpi-status-dot"></span>
+          </div>
+          <div class="kpi-number" id="metricAvgCps">303.7 <span class="kpi-unit">cps</span></div>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer">
+            <span class="kpi-subtext" id="metricStdDev">Std Dev: 61.2</span>
+            <span class="kpi-subtext-meta">MEAN</span>
+          </div>
         </div>
 
         <div class="kpi-tile kpi-total">
-          <div class="kpi-header">Total Counts</div>
-          <div class="kpi-number" id="metricTotalCounts">12,540 <span class="kpi-unit">cts</span></div>
-          <div class="kpi-subtext">Accumulated</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Total Counts</span>
+            <span class="kpi-status-dot"></span>
+          </div>
+          <div class="kpi-number" id="metricTotalCounts">25,508 <span class="kpi-unit">cts</span></div>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer">
+            <span class="kpi-subtext">Accumulated</span>
+            <span class="kpi-subtext-meta">TOTAL</span>
+          </div>
         </div>
 
         <div class="kpi-tile kpi-bg">
-          <div class="kpi-header">Background</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Background</span>
+            <span class="kpi-status-dot"></span>
+          </div>
           <div class="kpi-number" id="metricBgCps">31.4 <span class="kpi-unit">cps</span></div>
-          <div class="kpi-subtext">Base Radiation</div>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer">
+            <span class="kpi-subtext">Base Radiation</span>
+            <span class="kpi-subtext-meta">BKG</span>
+          </div>
         </div>
 
         <div class="kpi-tile kpi-time" title="Waktu rekaman data terakhir di TiDB Cloud">
-          <div class="kpi-header">Last DB Record</div>
+          <div class="kpi-top">
+            <span class="kpi-header">Last DB Record</span>
+            <span class="kpi-status-dot"></span>
+          </div>
           <div class="kpi-number" id="metricLastTimestamp">
-            <span id="metricLastTime">--:--:--</span>
+            <span id="metricLastTime">13:55:28</span>
             <span class="kpi-unit" id="metricLastTz">WIB</span>
           </div>
-          <div class="kpi-subtext" id="metricLastTimestampSub">
-            <span id="metricLastDate">-- --- ----</span> &bull; <strong id="kpiDbSourceBadge" style="color:var(--accent-emerald);">TiDB Cloud</strong>
+          <div class="kpi-progress-bar"><div class="kpi-bar-fill"></div></div>
+          <div class="kpi-footer" id="metricLastTimestampSub">
+            <span class="kpi-subtext" id="metricLastDate">20 Okt 2026</span>
+            <span class="kpi-subtext-meta" id="kpiDbSourceBadge">TiDB CLOUD</span>
           </div>
         </div>
       </div>
