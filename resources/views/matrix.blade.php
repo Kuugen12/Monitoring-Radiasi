@@ -37,32 +37,6 @@
         <span class="badge-db-live" id="headerDbSourceBadge" style="background:rgba(16,185,129,0.15);color:#34D399;font-size:9.5px;padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:0.3px;border:1px solid rgba(16,185,129,0.3);">TiDB CLOUD</span>
       </div>
 
-      <div class="hud-chip live-chip" id="liveStatusBadge">
-        <span class="live-indicator-dot" id="livePulseDot"></span>
-        <span id="liveStatusText">1.0 Hz</span>
-      </div>
-
-      <div class="module-status-cluster">
-        <div class="module-chip xs1 online" id="pillXS1" title="Xiao Seeed 1 (D01–D24)">
-          <span class="mod-dot"></span>
-          <span class="mod-name">XS1</span>
-        </div>
-        <div class="module-chip xs2 online" id="pillXS2" title="Xiao Seeed 2 (D25–D48)">
-          <span class="mod-dot"></span>
-          <span class="mod-name">XS2</span>
-        </div>
-        <div class="module-chip xs3 online" id="pillXS3" title="Xiao Seeed 3 (D49–D72)">
-          <span class="mod-dot"></span>
-          <span class="mod-name">XS3</span>
-        </div>
-      </div>
-
-      <div class="hud-chip progress-chip">
-        <span>Z-STEP:</span> <strong id="headerHeightProgress">0 / 10</strong>
-      </div>
-      <div class="hud-chip loop-chip" id="hudLoopChip" title="Iterasi loop pemindaian per baris">
-        <span>LOOP:</span> <strong id="headerLoopProgress" style="color:#7DD3FC;">1 / 1</strong>
-      </div>
       <!-- Transition Status Chip -->
       <div class="hud-chip transition-chip" id="hudTransitionChip" style="display:none;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#FBBF24;" title="Proses delay transisi perpindahan baris">
         <span class="transition-spinner"></span>
@@ -2714,8 +2688,10 @@ function startScanning(fromModal = false) {
     document.getElementById('btnStartScan').disabled = true;
     document.getElementById('btnPauseScan').disabled = false;
     document.getElementById('btnStopScan').disabled = false;
-    document.getElementById('headerHeightProgress').textContent = `1 / ${APP_STATE.totalHeights}`;
-    document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
+    const elHeightProg = document.getElementById('headerHeightProgress');
+    if (elHeightProg) elHeightProg.textContent = `1 / ${APP_STATE.totalHeights}`;
+    const elLoopProg = document.getElementById('headerLoopProgress');
+    if (elLoopProg) elLoopProg.textContent = `1 / ${APP_STATE.totalLoops}`;
 
     logTerminal(`<span class="log-badge-ok">[SCAN START]</span> Target: <strong>${APP_STATE.objectName}</strong> | ${APP_STATE.totalHeights} Steps &times; ${APP_STATE.totalLoops} Loops (${APP_STATE.totalChannels} Ch) | Sampling: ${APP_STATE.samplingIntervalMs}ms | Delay: ${APP_STATE.transitionDelay}s`);
   }
@@ -2927,8 +2903,10 @@ function stopScanning(isCompleted = false) {
   document.getElementById('pauseBtnLabel').textContent = 'PAUSE';
   document.getElementById('btnPauseScan').classList.remove('btn-start');
 
-  document.getElementById('headerHeightProgress').textContent = `${APP_STATE.totalHeights} / ${APP_STATE.totalHeights}`;
-  document.getElementById('headerLoopProgress').textContent = `${APP_STATE.totalLoops} / ${APP_STATE.totalLoops}`;
+  const elHeightProgEnd = document.getElementById('headerHeightProgress');
+  if (elHeightProgEnd) elHeightProgEnd.textContent = `${APP_STATE.totalHeights} / ${APP_STATE.totalHeights}`;
+  const elLoopProgEnd = document.getElementById('headerLoopProgress');
+  if (elLoopProgEnd) elLoopProgEnd.textContent = `${APP_STATE.totalLoops} / ${APP_STATE.totalLoops}`;
 
   if (APP_STATE.sessionRecords.length > 0) {
     // Tombol Simpan berubah menjadi HIJAU & UNLOCKED
@@ -3112,7 +3090,8 @@ function selectAllLoops(shouldSelect) {
 function updateTotalHeights(val) {
   APP_STATE.totalHeights = parseInt(val) || 10;
   buildSidebarLoopList(true);
-  document.getElementById('headerHeightProgress').textContent = `0 / ${APP_STATE.totalHeights}`;
+  const elHProg = document.getElementById('headerHeightProgress');
+  if (elHProg) elHProg.textContent = `0 / ${APP_STATE.totalHeights}`;
   renderMatrixHeatmap();
 }
 
@@ -3161,7 +3140,8 @@ function updateBaudrate(val) {
 function updateSamplingInterval(val) {
   APP_STATE.samplingIntervalMs = parseInt(val) || 1000;
   const hz = (1000 / APP_STATE.samplingIntervalMs).toFixed(1);
-  document.getElementById('liveStatusText').textContent = `${hz} Hz`;
+  const elLiveText = document.getElementById('liveStatusText');
+  if (elLiveText) elLiveText.textContent = `${hz} Hz`;
   logTerminal(`<span class="log-badge-ok">[CONFIG]</span> Sampling rate set to <strong>${hz} Hz</strong> (${val}ms)`);
 
   if (APP_STATE.useFirebase && firebaseDb) {
@@ -4259,8 +4239,10 @@ function loadObjectDataFromTiDB(objectName = '', showNotification = false) {
           APP_STATE.userModifiedLoops = false;
 
           // Update HUD indicators
-          document.getElementById('headerHeightProgress').textContent = `${detectedRows} / ${detectedRows}`;
-          document.getElementById('headerLoopProgress').textContent = `1 / ${APP_STATE.totalLoops}`;
+          const elHProgInit = document.getElementById('headerHeightProgress');
+          if (elHProgInit) elHProgInit.textContent = `${detectedRows} / ${detectedRows}`;
+          const elLProgInit = document.getElementById('headerLoopProgress');
+          if (elLProgInit) elLProgInit.textContent = `1 / ${APP_STATE.totalLoops}`;
 
           // Update Quick Inputs
           const qSteps = document.getElementById('inputTotalHeight');
